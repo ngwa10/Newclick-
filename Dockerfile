@@ -1,20 +1,21 @@
-# Use Selenium standalone Chrome image
+# Use Selenium Chrome standalone with VNC
 FROM selenium/standalone-chrome:114.0
-
-# Install Python3 and pip
-USER root
-RUN apt-get update && apt-get install -y python3 python3-pip \
-    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy Python requirements and install
+# Copy bot files
 COPY requirements.txt .
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+COPY bot.py .
 
-# Copy all application files
-COPY . .
+# Install Python dependencies
+USER root
+RUN apt-get update && \
+    apt-get install -y python3-pip python3-dotenv && \
+    pip3 install --no-cache-dir -r requirements.txt
 
-# Run the bot
-CMD ["python3", "bot.py"]
+# Set user back to seluser (default for selenium/standalone-chrome)
+USER seluser
+
+# Run bot
+CMD ["python3", "/app/bot.py"]
