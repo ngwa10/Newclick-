@@ -6,66 +6,67 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
+from dotenv import load_dotenv
 
-# --- Headless Chrome setup for manual login ---
+# --- Load .env ---
+load_dotenv()
+PO_EMAIL = os.getenv("POCKET_EMAIL")
+PO_PASS = os.getenv("POCKET_PASS")
+
+# --- Chrome setup (manual login) ---
 chrome_options = Options()
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--window-size=1920,1080")
-chrome_options.add_argument("--start-maximized")
-# Do NOT use headless: we need manual login
-# chrome_options.add_argument("--headless")  
+# DO NOT use headless since we want manual login
+# chrome_options.add_argument("--headless")
 
-# --- Start WebDriver ---
 driver = webdriver.Chrome(options=chrome_options)
-wait = WebDriverWait(driver, 30)
+wait = WebDriverWait(driver, 20)
 
 try:
-    # --- Open login page manually ---
-    print("[INFO] Opening login page. Please log in manually...")
+    # --- Open login page ---
+    print("[INFO] Please manually log in via the browser session...")
     driver.get("https://pocketoption.com/en/login/")
 
-    # --- Wait until user has logged in ---
-    logged_in = False
-    for i in range(300):  # wait up to ~5 minutes
-        try:
-            # Check for dashboard element (balance container)
-            if wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'balance')]"))):
-                logged_in = True
-                break
-        except TimeoutException:
-            pass
-        time.sleep(1)
-    if not logged_in:
-        print("[ERROR] Manual login timeout. Exiting.")
+    # Wait until user manually logs in (detect balance element)
+    try:
+        wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'balance')]")))
+        print("[SUCCESS] Logged in successfully!")
+    except TimeoutException:
+        print("[ERROR] Dashboard did not load in time. Take manual action in the browser.")
+        driver.save_screenshot("login_manual.png")
         driver.quit()
         exit(1)
 
-    print("[SUCCESS] Logged in manually! Opening demo trading page...")
+    # --- Navigate to demo trading page ---
+    print("[INFO] Opening demo trading page...")
     driver.get("https://pocketoption.com/en/cabinet/demo-quick-high-low/")
 
     # --- Wait for canvas ---
     canvas = None
-    for i in range(10):
+    for i in range(5):
         try:
             canvas = wait.until(EC.presence_of_element_located((By.TAG_NAME, "canvas")))
             break
         except TimeoutException:
-            print(f"[WARN] Canvas not ready yet (attempt {i+1}/10)...")
-            time.sleep(2)
+            print(f"[WARN] Canvas not ready yet (attempt {i+1}/5)...")
+            time.sleep(3)
+
     if not canvas:
         print("[ERROR] Canvas not found. Exiting.")
         driver.quit()
         exit(1)
 
-    # --- Calculate CALL button coordinates ---
+    # --- Canvas & CALL button coordinates ---
     CALL_X_PERCENT = 0.75
     CALL_Y_PERCENT = 0.85
+
     canvas_rect = canvas.rect
     call_x = canvas_rect['width'] * CALL_X_PERCENT
     call_y = canvas_rect['height'] * CALL_Y_PERCENT
 
-    print("[SUCCESS] Canvas found. Bot will auto-click CALL every 5 seconds...")
+    print("[SUCCESS] Canvas found. Bot started: auto-clicking CALL every 5 seconds...")
 
     # --- Auto-click loop ---
     while True:
@@ -86,4 +87,3 @@ except Exception as e:
     print(f"[FATAL] Unexpected error: {e}")
 finally:
     driver.quit()
-        
