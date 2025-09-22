@@ -3,13 +3,17 @@ import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from dotenv import load_dotenv
 
-# --- Read environment variables ---
+# --- Load .env ---
+load_dotenv()
 PO_EMAIL = os.getenv("POCKET_EMAIL")
 PO_PASS = os.getenv("POCKET_PASS")
 
 if not PO_EMAIL or not PO_PASS:
-    raise ValueError("POCKET_EMAIL or POCKET_PASS environment variables are missing!")
+    raise ValueError("POCKET_EMAIL or POCKET_PASS is not set in .env")
 
 # --- Headless Chrome setup ---
 chrome_options = Options()
@@ -22,24 +26,39 @@ driver = webdriver.Chrome(options=chrome_options)
 
 # --- Login ---
 driver.get("https://pocketoption.com/en/login/")
-time.sleep(2)
+
+# Wait for email field to be present
+WebDriverWait(driver, 20).until(
+    EC.presence_of_element_located((By.NAME, "email"))
+)
 
 driver.find_element(By.NAME, "email").send_keys(PO_EMAIL)
 driver.find_element(By.NAME, "password").send_keys(PO_PASS)
 driver.find_element(By.XPATH, "//button[@type='submit']").click()
-time.sleep(5)
 
-# --- Navigate to demo quick trading ---
-driver.get("https://m.pocketoption.com/en/cabinet/demo-quick-high-low/")
-time.sleep(5)
+# --- Navigate to desktop demo quick trading ---
+driver.get("https://pocketoption.com/en/demo-quick-high-low/")
+
+# Wait for canvas to load
+try:
+    # Optional: handle iframe if exists
+    iframes = driver.find_elements(By.TAG_NAME, "iframe")
+    if iframes:
+        driver.switch_to.frame(iframes[0])
+
+    canvas = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.TAG_NAME, "canvas"))
+    )
+except:
+    print("Canvas not found. Exiting.")
+    driver.quit()
+    exit()
 
 # --- Canvas & CALL button coordinates ---
 CALL_X_PERCENT = 0.75  # 75% width
 CALL_Y_PERCENT = 0.85  # 85% height
 
-canvas = driver.find_element(By.TAG_NAME, "canvas")
 canvas_rect = canvas.rect
-
 call_x = canvas_rect['width'] * CALL_X_PERCENT
 call_y = canvas_rect['height'] * CALL_Y_PERCENT
 
@@ -55,4 +74,3 @@ while True:
     )
     print("CALL clicked")
     time.sleep(5)
-        
