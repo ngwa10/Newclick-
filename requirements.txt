@@ -1,2 +1,4 @@
-selenium==4.16.0
-python-dotenv==1.0.1
+selenium==4.12.0
+python-dotenv==1.0.0
+telegram==0.0.1  # or correct package
+python-telegram-bot==20.3
