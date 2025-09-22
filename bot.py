@@ -15,7 +15,7 @@ PO_PASS = os.getenv("POCKET_PASS")
 
 # --- Headless Chrome setup ---
 chrome_options = Options()
-chrome_options.add_argument("--headless")  # stable headless
+chrome_options.add_argument("--headless=new")  # stable headless
 chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
@@ -23,7 +23,7 @@ chrome_options.add_argument("--window-size=1920,1080")
 chrome_options.add_argument("--remote-debugging-port=9222")  # essential in container
 
 driver = webdriver.Chrome(options=chrome_options)
-wait = WebDriverWait(driver, 20)
+wait = WebDriverWait(driver, 40)  # increased timeout
 
 try:
     # --- Login ---
@@ -39,7 +39,9 @@ try:
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'balance')]")))
         print("[SUCCESS] Logged in successfully!")
     except TimeoutException:
-        print("[ERROR] Dashboard did not load in time. Check credentials or page layout.")
+        print("[ERROR] Dashboard did not load in time. Taking screenshot for debugging...")
+        driver.save_screenshot("/app/login_error.png")  # save screenshot in container
+        print("[INFO] Screenshot saved as login_error.png")
         driver.quit()
         exit(1)
 
@@ -58,7 +60,9 @@ try:
             time.sleep(3)
 
     if not canvas:
-        print("[ERROR] Canvas not found after retries. Exiting.")
+        print("[ERROR] Canvas not found after retries. Taking screenshot...")
+        driver.save_screenshot("/app/canvas_error.png")
+        print("[INFO] Screenshot saved as canvas_error.png")
         driver.quit()
         exit(1)
 
@@ -85,9 +89,11 @@ try:
             time.sleep(5)
         except WebDriverException as e:
             print(f"[ERROR] WebDriver exception during click: {e}")
+            driver.save_screenshot("/app/click_error.png")
             time.sleep(5)
 
 except Exception as e:
     print(f"[FATAL] Unexpected error: {e}")
+    driver.save_screenshot("/app/fatal_error.png")
 finally:
     driver.quit()
