@@ -1,3 +1,6 @@
+# Base image
+FROM python:3.11-slim
+
 # Install dependencies + Google Chrome
 RUN apt-get update && apt-get install -y \
     wget \
@@ -24,4 +27,12 @@ RUN apt-get update && apt-get install -y \
         > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
-    
+
+# Copy Python code
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+
+# Run the bot
+CMD ["python", "bot.py"]
