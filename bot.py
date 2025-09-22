@@ -10,10 +10,17 @@ from dotenv import load_dotenv
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-def log_exception(e, driver=None):
+def log_exception(e, driver=None, take_screenshot=True):
     url = driver.current_url if driver else "N/A"
     title = driver.title if driver else "N/A"
     log(f"EXCEPTION at URL: {url}, Page title: {title}, Error: {e}")
+    if driver and take_screenshot:
+        try:
+            screenshot_file = f"screenshot_{int(time.time())}.png"
+            driver.save_screenshot(screenshot_file)
+            log(f"Screenshot saved: {screenshot_file}")
+        except Exception as ss_e:
+            log(f"Failed to save screenshot: {ss_e}")
 
 # --- Load .env ---
 load_dotenv()
