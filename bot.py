@@ -5,6 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from dotenv import load_dotenv
 
 # --- Load .env ---
@@ -14,11 +15,12 @@ PO_PASS = os.getenv("POCKET_PASS")
 
 # --- Headless Chrome setup ---
 chrome_options = Options()
-chrome_options.add_argument("--headless=new")
+chrome_options.add_argument("--headless")  # stable headless
 chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--window-size=1920,1080")
+chrome_options.add_argument("--remote-debugging-port=9222")  # essential in container
 
 driver = webdriver.Chrome(options=chrome_options)
 wait = WebDriverWait(driver, 20)
@@ -33,9 +35,13 @@ try:
     driver.find_element(By.XPATH, "//button[@type='submit']").click()
     print("[INFO] Login submitted. Waiting for dashboard...")
 
-    # Wait until user avatar or balance is visible
-    wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'balance')]")))
-    print("[SUCCESS] Logged in successfully!")
+    try:
+        wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'balance')]")))
+        print("[SUCCESS] Logged in successfully!")
+    except TimeoutException:
+        print("[ERROR] Dashboard did not load in time. Check credentials or page layout.")
+        driver.quit()
+        exit(1)
 
     # --- Navigate to demo quick trading ---
     print("[INFO] Opening demo trading page...")
@@ -43,11 +49,11 @@ try:
 
     # --- Wait for canvas (retry loop) ---
     canvas = None
-    for i in range(5):  # retry up to 5 times
+    for i in range(5):
         try:
             canvas = wait.until(EC.presence_of_element_located((By.TAG_NAME, "canvas")))
             break
-        except:
+        except TimeoutException:
             print(f"[WARN] Canvas not ready yet (attempt {i+1}/5)...")
             time.sleep(3)
 
@@ -57,8 +63,8 @@ try:
         exit(1)
 
     # --- Canvas & CALL button coordinates ---
-    CALL_X_PERCENT = 0.75  # 75% width
-    CALL_Y_PERCENT = 0.85  # 85% height
+    CALL_X_PERCENT = 0.75
+    CALL_Y_PERCENT = 0.85
 
     canvas_rect = canvas.rect
     call_x = canvas_rect['width'] * CALL_X_PERCENT
@@ -68,17 +74,20 @@ try:
 
     # --- Auto-click loop ---
     while True:
-        driver.execute_script(
-            "const canvas=arguments[0]; const x=arguments[1]; const y=arguments[2];"
-            "canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:x, clientY:y,bubbles:true}));"
-            "canvas.dispatchEvent(new MouseEvent('mouseup',{clientX:x, clientY:y,bubbles:true}));",
-            canvas, call_x, call_y
-        )
-        print("[CLICK] CALL clicked")
-        time.sleep(5)
+        try:
+            driver.execute_script(
+                "const canvas=arguments[0]; const x=arguments[1]; const y=arguments[2];"
+                "canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:x, clientY:y,bubbles:true}));"
+                "canvas.dispatchEvent(new MouseEvent('mouseup',{clientX:x, clientY:y,bubbles:true}));",
+                canvas, call_x, call_y
+            )
+            print("[CLICK] CALL clicked")
+            time.sleep(5)
+        except WebDriverException as e:
+            print(f"[ERROR] WebDriver exception during click: {e}")
+            time.sleep(5)
 
 except Exception as e:
     print(f"[FATAL] Unexpected error: {e}")
 finally:
     driver.quit()
-    
