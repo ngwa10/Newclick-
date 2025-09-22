@@ -3,12 +3,13 @@ import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from dotenv import load_dotenv
 
-# --- Load .env ---
-load_dotenv()
+# --- Read environment variables ---
 PO_EMAIL = os.getenv("POCKET_EMAIL")
 PO_PASS = os.getenv("POCKET_PASS")
+
+if not PO_EMAIL or not PO_PASS:
+    raise ValueError("POCKET_EMAIL or POCKET_PASS environment variables are missing!")
 
 # --- Headless Chrome setup ---
 chrome_options = Options()
@@ -54,3 +55,4 @@ while True:
     )
     print("CALL clicked")
     time.sleep(5)
+        
