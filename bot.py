@@ -6,68 +6,68 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-
-# Headless=False so we can see the browser via VNC
+# --- Headless Chrome setup for manual login ---
 chrome_options = Options()
-chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--window-size=1920,1080")
-chrome_options.add_argument("--remote-debugging-port=9222")  # required
+chrome_options.add_argument("--start-maximized")
+# Do NOT use headless: we need manual login
+# chrome_options.add_argument("--headless")  
 
-# Connect to local Chrome (Selenium server runs at 4444)
-driver = webdriver.Remote(
-    command_executor="http://localhost:4444/wd/hub",
-    options=chrome_options
-)
-wait = WebDriverWait(driver, 60)  # wait for manual login
+# --- Start WebDriver ---
+driver = webdriver.Chrome(options=chrome_options)
+wait = WebDriverWait(driver, 30)
 
 try:
-    # Open login page
-    print("[INFO] Opened login page. Please log in manually using VNC...")
+    # --- Open login page manually ---
+    print("[INFO] Opening login page. Please log in manually...")
     driver.get("https://pocketoption.com/en/login/")
 
-    # Wait for dashboard
-    try:
-        wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'balance')]")))
-        print("[SUCCESS] Dashboard detected! Continuing automation...")
-    except TimeoutException:
-        print("[ERROR] Dashboard not detected in time. Screenshot saved.")
-        driver.save_screenshot("manual_login_error.png")
+    # --- Wait until user has logged in ---
+    logged_in = False
+    for i in range(300):  # wait up to ~5 minutes
+        try:
+            # Check for dashboard element (balance container)
+            if wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'balance')]"))):
+                logged_in = True
+                break
+        except TimeoutException:
+            pass
+        time.sleep(1)
+    if not logged_in:
+        print("[ERROR] Manual login timeout. Exiting.")
         driver.quit()
         exit(1)
 
-    # Navigate to demo quick trading
+    print("[SUCCESS] Logged in manually! Opening demo trading page...")
     driver.get("https://pocketoption.com/en/cabinet/demo-quick-high-low/")
 
-    # Wait for canvas
+    # --- Wait for canvas ---
     canvas = None
-    for i in range(5):
+    for i in range(10):
         try:
             canvas = wait.until(EC.presence_of_element_located((By.TAG_NAME, "canvas")))
             break
         except TimeoutException:
-            print(f"[WARN] Canvas not ready yet (attempt {i+1}/5)...")
-            time.sleep(3)
-
+            print(f"[WARN] Canvas not ready yet (attempt {i+1}/10)...")
+            time.sleep(2)
     if not canvas:
-        print("[ERROR] Canvas not found after retries. Exiting.")
+        print("[ERROR] Canvas not found. Exiting.")
         driver.quit()
         exit(1)
 
-    # Auto-click loop
+    # --- Calculate CALL button coordinates ---
     CALL_X_PERCENT = 0.75
     CALL_Y_PERCENT = 0.85
     canvas_rect = canvas.rect
     call_x = canvas_rect['width'] * CALL_X_PERCENT
     call_y = canvas_rect['height'] * CALL_Y_PERCENT
 
-    print("[SUCCESS] Canvas found. Auto-clicking CALL every 5 seconds...")
+    print("[SUCCESS] Canvas found. Bot will auto-click CALL every 5 seconds...")
 
+    # --- Auto-click loop ---
     while True:
         try:
             driver.execute_script(
@@ -86,3 +86,4 @@ except Exception as e:
     print(f"[FATAL] Unexpected error: {e}")
 finally:
     driver.quit()
+        
