@@ -24,9 +24,10 @@ RUN DRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST
     && chmod +x /usr/local/bin/chromedriver \
     && rm -rf /tmp/*
 
-# Install noVNC
+# Install noVNC and websockify
 RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
     && git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify \
+    && chmod +x /opt/noVNC/utils/launch.sh \
     && ln -s /opt/noVNC /usr/share/novnc
 
 # Copy dependencies and app
