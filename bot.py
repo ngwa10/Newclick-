@@ -8,67 +8,58 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from dotenv import load_dotenv
 
-# --- Load .env ---
+# Load .env
 load_dotenv()
 PO_EMAIL = os.getenv("POCKET_EMAIL")
 PO_PASS = os.getenv("POCKET_PASS")
 
-# --- Chrome setup (manual login) ---
+# Chrome setup (manual login)
 chrome_options = Options()
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--window-size=1920,1080")
-# DO NOT use headless since we want manual login
-# chrome_options.add_argument("--headless")
+chrome_options.add_argument("--disable-blink-features=AutomationControlled")
 
 driver = webdriver.Chrome(options=chrome_options)
-wait = WebDriverWait(driver, 20)
+wait = WebDriverWait(driver, 25)
 
 try:
-    # --- Open login page ---
-    print("[INFO] Please manually log in via the browser session...")
+    print("[INFO] Please manually log in via the noVNC browser session...")
     driver.get("https://pocketoption.com/en/login/")
 
-    # Wait until user manually logs in (detect balance element)
     try:
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'balance')]")))
         print("[SUCCESS] Logged in successfully!")
     except TimeoutException:
-        print("[ERROR] Dashboard did not load in time. Take manual action in the browser.")
+        print("[ERROR] Dashboard did not load in time. You may need to solve captcha.")
         driver.save_screenshot("login_manual.png")
-        driver.quit()
         exit(1)
 
-    # --- Navigate to demo trading page ---
     print("[INFO] Opening demo trading page...")
     driver.get("https://pocketoption.com/en/cabinet/demo-quick-high-low/")
 
-    # --- Wait for canvas ---
     canvas = None
     for i in range(5):
         try:
             canvas = wait.until(EC.presence_of_element_located((By.TAG_NAME, "canvas")))
             break
         except TimeoutException:
-            print(f"[WARN] Canvas not ready yet (attempt {i+1}/5)...")
+            print(f"[WARN] Canvas not ready (attempt {i+1}/5)...")
             time.sleep(3)
 
     if not canvas:
         print("[ERROR] Canvas not found. Exiting.")
-        driver.quit()
         exit(1)
 
-    # --- Canvas & CALL button coordinates ---
     CALL_X_PERCENT = 0.75
     CALL_Y_PERCENT = 0.85
-
     canvas_rect = canvas.rect
     call_x = canvas_rect['width'] * CALL_X_PERCENT
     call_y = canvas_rect['height'] * CALL_Y_PERCENT
 
-    print("[SUCCESS] Canvas found. Bot started: auto-clicking CALL every 5 seconds...")
+    print("[SUCCESS] Canvas found. Bot started (auto-click CALL every 5 seconds)...")
 
-    # --- Auto-click loop ---
     while True:
         try:
             driver.execute_script(
@@ -80,7 +71,7 @@ try:
             print("[CLICK] CALL clicked")
             time.sleep(5)
         except WebDriverException as e:
-            print(f"[ERROR] WebDriver exception during click: {e}")
+            print(f"[ERROR] WebDriver exception: {e}")
             time.sleep(5)
 
 except Exception as e:
