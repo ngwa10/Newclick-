@@ -1,42 +1,117 @@
-# Base image
-FROM python:3.11-slim
+import os
+import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, WebDriverException
+from dotenv import load_dotenv
 
-# Install dependencies
-RUN apt-get update && apt-get install -y \
-    wget gnupg unzip curl x11vnc xvfb net-tools git python3-pip \
-    supervisor fonts-liberation libappindicator3-1 \
-    libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
-    libdbus-1-3 libgdk-pixbuf-2.0-0 libnspr4 libnss3 \
-    libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
-    xdg-utils libgl1 libxrender1 libxext6 \
-    && rm -rf /var/lib/apt/lists/*
+# --- Load environment variables ---
+load_dotenv()
+PO_EMAIL = os.getenv("POCKET_EMAIL")
+PO_PASS = os.getenv("POCKET_PASS")
 
-# Install Google Chrome
-RUN wget -q -O /usr/share/keyrings/google-linux-signing-key.gpg https://dl.google.com/linux/linux_signing_key.pub \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux-signing-key.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
-       > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update && apt-get install -y google-chrome-stable
+def init_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080")
+    # DO NOT use headless; manual login required
+    # chrome_options.add_argument("--headless")
 
-# Install ChromeDriver
-RUN DRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE") \
-    && wget -q "https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver_linux64.zip" -O /tmp/chromedriver.zip \
-    && unzip /tmp/chromedriver.zip -d /usr/local/bin/ \
-    && chmod +x /usr/local/bin/chromedriver \
-    && rm -rf /tmp/*
+    try:
+        driver = webdriver.Chrome(
+            options=chrome_options,
+            executable_path="/usr/local/bin/chromedriver"
+        )
+        print("[INFO] ChromeDriver initialized successfully.")
+        return driver
+    except Exception as e:
+        print("[FATAL] ChromeDriver failed to initialize:", e)
+        return None
 
-# Install noVNC
-RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
-    && git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify \
-    && ln -s /opt/noVNC /usr/share/novnc
+def safe_quit(driver):
+    try:
+        if driver:
+            driver.quit()
+    except Exception:
+        pass
 
-# Copy dependencies and app
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+def main():
+    driver = init_driver()
+    if not driver:
+        return
 
-# Expose VNC and noVNC ports
-EXPOSE 5900 6080
+    wait = WebDriverWait(driver, 20)
+    try:
+        print("[INFO] Open login page...")
+        driver.get("https://pocketoption.com/en/login/")
 
-# Start everything with supervisord
-CMD ["/usr/bin/supervisord", "-c", "/app/supervisord.conf"]
+        # Wait for manual login: detect balance element
+        try:
+            wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'balance')]")))
+            print("[SUCCESS] Logged in successfully!")
+        except TimeoutException:
+            print("[ERROR] Dashboard did not load. Manual action required.")
+            driver.save_screenshot("login_manual.png")
+            safe_quit(driver)
+            return
+
+        # Navigate to demo trading page
+        print("[INFO] Opening demo trading page...")
+        driver.get("https://pocketoption.com/en/cabinet/demo-quick-high-low/")
+
+        # Wait for canvas
+        canvas = None
+        for i in range(5):
+            try:
+                canvas = wait.until(EC.presence_of_element_located((By.TAG_NAME, "canvas")))
+                break
+            except TimeoutException:
+                print(f"[WARN] Canvas not ready yet (attempt {i+1}/5)...")
+                time.sleep(3)
+
+        if not canvas:
+            print("[ERROR] Canvas not found. Exiting.")
+            safe_quit(driver)
+            return
+
+        # Canvas & CALL button coordinates
+        CALL_X_PERCENT = 0.75
+        CALL_Y_PERCENT = 0.85
+        canvas_rect = canvas.rect
+        call_x = canvas_rect['width'] * CALL_X_PERCENT
+        call_y = canvas_rect['height'] * CALL_Y_PERCENT
+
+        print("[SUCCESS] Canvas found. Bot started: auto-clicking CALL every 5 seconds...")
+
+        # Auto-click loop
+        while True:
+            try:
+                driver.execute_script(
+                    "const canvas=arguments[0]; const x=arguments[1]; const y=arguments[2];"
+                    "canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:x, clientY:y,bubbles:true}));"
+                    "canvas.dispatchEvent(new MouseEvent('mouseup',{clientX:x, clientY:y,bubbles:true}));",
+                    canvas, call_x, call_y
+                )
+                print("[CLICK] CALL clicked")
+                time.sleep(5)
+            except WebDriverException as e:
+                print(f"[ERROR] WebDriver exception during click: {e}")
+                time.sleep(5)
+
+    except Exception as e:
+        print(f"[FATAL] Unexpected error: {e}")
+    finally:
+        safe_quit(driver)
+
+if __name__ == "__main__":
+    while True:
+        try:
+            main()
+        except Exception as e:
+            print(f"[FATAL] Bot crashed unexpectedly: {e}")
+            time.sleep(5)  # wait before restart
+                                                       
