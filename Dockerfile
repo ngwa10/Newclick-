@@ -3,12 +3,11 @@ FROM python:3.11-slim
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
-    wget gnupg unzip curl x11vnc xvfb net-tools git python3-pip \
-    supervisor fonts-liberation libappindicator3-1 \
-    libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
-    libdbus-1-3 libgdk-pixbuf-2.0-0 libnspr4 libnss3 \
-    libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
-    xdg-utils libgl1 libxrender1 libxext6 \
+    wget gnupg unzip curl x11vnc xvfb net-tools git python3-pip supervisor \
+    fonts-liberation libappindicator3-1 libasound2 libatk-bridge2.0-0 \
+    libatk1.0-0 libcups2 libdbus-1-3 libgdk-pixbuf-2.0-0 libnspr4 libnss3 \
+    libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 xdg-utils libgl1 \
+    libxrender1 libxext6 socat libvncserver1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Google Chrome
@@ -24,20 +23,19 @@ RUN DRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST
     && chmod +x /usr/local/bin/chromedriver \
     && rm -rf /tmp/*
 
-# Install noVNC and websockify
+# Install noVNC manually
 RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
     && git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify \
-    && chmod +x /opt/noVNC/utils/launch.sh \
-    && ln -s /opt/noVNC /usr/share/novnc
+    && chmod +x /opt/noVNC/utils/launch.sh
 
-# Copy dependencies and app
+# Set workdir and copy app
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Expose VNC and noVNC ports
+# Expose ports
 EXPOSE 5900 6080
 
-# Start everything with supervisord
+# Start supervisor
 CMD ["/usr/bin/supervisord", "-c", "/app/supervisord.conf"]
