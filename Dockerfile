@@ -1,7 +1,7 @@
 # Base image
 FROM python:3.11-slim
 
-# Install dependencies + Chrome + Chromedriver + Xvfb + noVNC
+# Install dependencies + Chrome + Chromedriver + Xvfb + noVNC + Supervisor
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -35,21 +35,25 @@ RUN apt-get update && apt-get install -y \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux-signing-key.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
         > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update && apt-get install -y google-chrome-stable \
-    && CHROME_VERSION=$(google-chrome --version | awk '{print $3}') \
     && DRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE") \
     && wget -q "https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver_linux64.zip" -O /tmp/chromedriver.zip \
     && unzip /tmp/chromedriver.zip -d /usr/local/bin/ \
     && chmod +x /usr/local/bin/chromedriver \
     && rm -rf /var/lib/apt/lists/* /tmp/*
 
-# Copy dependencies
+# Set working directory
 WORKDIR /app
+
+# Copy Python dependencies and install
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
 
-# Expose ports
+# Copy application code and supervisord config
+COPY . .
+COPY supervisord.conf /app/supervisord.conf
+
+# Expose ports for noVNC and VNC
 EXPOSE 5900 6080
 
-# Start everything with supervisord
+# Start supervisord to run Xvfb, x11vnc, noVNC, and bot
 CMD ["/usr/bin/supervisord", "-c", "/app/supervisord.conf"]
