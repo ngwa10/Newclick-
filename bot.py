@@ -13,20 +13,21 @@ load_dotenv()
 PO_EMAIL = os.getenv("POCKET_EMAIL")
 PO_PASS = os.getenv("POCKET_PASS")
 
-# --- Wait for Xvfb to be fully ready ---
-time.sleep(5)
-
 # --- Chrome setup (manual login) ---
 chrome_options = Options()
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--window-size=1920,1080")
-chrome_options.add_argument("--remote-debugging-port=9222")
 # DO NOT use headless since we want manual login
-# chrome_options.add_argument("--headless=new")
+# chrome_options.add_argument("--headless")
 
-driver = webdriver.Chrome(options=chrome_options)
+# --- Safe ChromeDriver initialization ---
+try:
+    driver = webdriver.Chrome(options=chrome_options, executable_path="/usr/local/bin/chromedriver")
+except Exception as e:
+    print("[ERROR] ChromeDriver failed to initialize:", e)
+    exit(1)
+
 wait = WebDriverWait(driver, 20)
 
 try:
@@ -41,7 +42,10 @@ try:
     except TimeoutException:
         print("[ERROR] Dashboard did not load in time. Take manual action in the browser.")
         driver.save_screenshot("login_manual.png")
-        driver.quit()
+        try:
+            driver.quit()
+        except Exception:
+            pass
         exit(1)
 
     # --- Navigate to demo trading page ---
@@ -60,7 +64,10 @@ try:
 
     if not canvas:
         print("[ERROR] Canvas not found. Exiting.")
-        driver.quit()
+        try:
+            driver.quit()
+        except Exception:
+            pass
         exit(1)
 
     # --- Canvas & CALL button coordinates ---
@@ -91,5 +98,7 @@ try:
 except Exception as e:
     print(f"[FATAL] Unexpected error: {e}")
 finally:
-    driver.quit()
-    
+    try:
+        driver.quit()
+    except Exception:
+        pass
