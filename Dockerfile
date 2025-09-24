@@ -29,11 +29,14 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
     && git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify \
     && chmod +x /opt/noVNC/utils/novnc_proxy
 
-# Copy dependencies and app
+# Copy app and install Python dependencies
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
+
+# Increase /dev/shm for Chrome
+VOLUME /dev/shm
 
 # Expose VNC and noVNC ports
 EXPOSE 5900 6080
