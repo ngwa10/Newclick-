@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -14,6 +15,11 @@ PO_EMAIL = os.getenv("POCKET_EMAIL")
 PO_PASS = os.getenv("POCKET_PASS")
 
 
+def log(msg):
+    """Print message with timestamp"""
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
+
+
 def init_driver(retries=3):
     """Initialize ChromeDriver with retries for stability."""
     for attempt in range(1, retries + 1):
@@ -24,17 +30,15 @@ def init_driver(retries=3):
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-software-rasterizer")
             chrome_options.add_argument("--window-size=1920,1080")
-            # DO NOT use headless; manual login required
-            # chrome_options.add_argument("--headless")
 
             driver = webdriver.Chrome(options=chrome_options)
-            print(f"[INFO] ChromeDriver initialized successfully (attempt {attempt}).")
+            log(f"ChromeDriver initialized successfully (attempt {attempt}).")
             return driver
         except Exception as e:
-            print(f"[WARN] ChromeDriver failed to initialize on attempt {attempt}: {e}")
+            log(f"ChromeDriver failed to initialize on attempt {attempt}: {e}")
             time.sleep(3)
 
-    print("[FATAL] ChromeDriver could not be initialized after retries.")
+    log("ChromeDriver could not be initialized after retries.")
     return None
 
 
@@ -47,17 +51,15 @@ def safe_quit(driver):
 
 
 def wait_for_manual_login(driver, timeout=600):
-    """Wait for manual login to complete. Detect any stable post-login element."""
-    print("[INFO] Waiting for manual login...")
+    """Wait for manual login to complete."""
+    log("Waiting for manual login...")
     wait = WebDriverWait(driver, timeout)
     try:
-        # Replace with an element that always exists after login, e.g., cabinet page
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'cabinet-page')]")))
-        print("[SUCCESS] Login detected!")
+        log("Login detected!")
         return True
     except TimeoutException:
-        print("[ERROR] Login not detected within timeout.")
-        driver.save_screenshot("login_timeout.png")
+        log("Login not detected within timeout.")
         return False
 
 
@@ -67,14 +69,14 @@ def main():
         return
 
     try:
-        print("[INFO] Opening login page...")
+        log("Opening login page...")
         driver.get("https://pocketoption.com/en/login/")
 
         if not wait_for_manual_login(driver):
             safe_quit(driver)
             return
 
-        print("[INFO] Navigating to demo trading page...")
+        log("Navigating to demo trading page...")
         driver.get("https://pocketoption.com/en/cabinet/demo-quick-high-low/")
 
         # Wait for canvas element
@@ -83,31 +85,33 @@ def main():
         for i in range(5):
             try:
                 canvas = wait.until(EC.presence_of_element_located((By.TAG_NAME, "canvas")))
+                canvas_rect = canvas.rect
+                if canvas_rect['width'] < 100 or canvas_rect['height'] < 100:
+                    log(f"Canvas size too small: {canvas_rect}")
+                    safe_quit(driver)
+                    return
                 break
             except TimeoutException:
-                print(f"[WARN] Canvas not ready yet (attempt {i+1}/5)...")
+                log(f"Canvas not ready yet (attempt {i+1}/5)...")
                 time.sleep(3)
 
         if not canvas:
-            print("[ERROR] Canvas not found. Exiting.")
+            log("Canvas not found. Exiting.")
             safe_quit(driver)
             return
 
         # Canvas & CALL button coordinates
         CALL_X_PERCENT = 0.75
         CALL_Y_PERCENT = 0.85
-        canvas_rect = canvas.rect
         call_x = canvas_rect["width"] * CALL_X_PERCENT
         call_y = canvas_rect["height"] * CALL_Y_PERCENT
 
-        print("[SUCCESS] Canvas found. Bot started: auto-clicking CALL every 5 seconds...")
+        log("Canvas found. Bot started: auto-clicking CALL every 5 seconds...")
 
         # Auto-click loop
         while True:
             try:
-                # Ensure canvas is visible
                 driver.execute_script("arguments[0].scrollIntoView(true);", canvas)
-
                 driver.execute_script(
                     "const canvas=arguments[0]; const x=arguments[1]; const y=arguments[2];"
                     "canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:x, clientY:y,bubbles:true}));"
@@ -116,15 +120,14 @@ def main():
                     call_x,
                     call_y,
                 )
-                print("[CLICK] CALL clicked")
+                log("CALL clicked")
                 time.sleep(5)
             except WebDriverException as e:
-                print(f"[ERROR] WebDriver exception during click: {e}")
-                driver.save_screenshot(f"click_error_{int(time.time())}.png")
+                log(f"Canvas click failed: {e}")
                 time.sleep(5)
 
     except Exception as e:
-        print(f"[FATAL] Unexpected error: {e}")
+        log(f"Unexpected error: {e}")
     finally:
         safe_quit(driver)
 
@@ -134,6 +137,6 @@ if __name__ == "__main__":
         try:
             main()
         except Exception as e:
-            print(f"[FATAL] Bot crashed unexpectedly: {e}")
-            time.sleep(5)  # wait before restart
-    
+            log(f"Bot crashed unexpectedly: {e}")
+            time.sleep(5)
+        
