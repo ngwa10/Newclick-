@@ -13,24 +13,30 @@ load_dotenv()
 PO_EMAIL = os.getenv("POCKET_EMAIL")
 PO_PASS = os.getenv("POCKET_PASS")
 
-def init_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1920,1080")
-    # DO NOT use headless; manual login required
-    # chrome_options.add_argument("--headless")
 
-    try:
-        driver = webdriver.Chrome(
-            options=chrome_options,
-            executable_path="/usr/local/bin/chromedriver"
-        )
-        print("[INFO] ChromeDriver initialized successfully.")
-        return driver
-    except Exception as e:
-        print("[FATAL] ChromeDriver failed to initialize:", e)
-        return None
+def init_driver(retries=3):
+    """Initialize ChromeDriver with retries for stability."""
+    for attempt in range(1, retries + 1):
+        try:
+            chrome_options = Options()
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--disable-software-rasterizer")
+            chrome_options.add_argument("--window-size=1920,1080")
+            # DO NOT use headless; manual login required
+            # chrome_options.add_argument("--headless")
+
+            driver = webdriver.Chrome(options=chrome_options)
+            print(f"[INFO] ChromeDriver initialized successfully (attempt {attempt}).")
+            return driver
+        except Exception as e:
+            print(f"[WARN] ChromeDriver failed to initialize on attempt {attempt}: {e}")
+            time.sleep(3)
+
+    print("[FATAL] ChromeDriver could not be initialized after retries.")
+    return None
+
 
 def safe_quit(driver):
     try:
@@ -38,6 +44,7 @@ def safe_quit(driver):
             driver.quit()
     except Exception:
         pass
+
 
 def wait_for_manual_login(driver, timeout=600):
     """Wait for manual login to complete. Detect any stable post-login element."""
@@ -52,6 +59,7 @@ def wait_for_manual_login(driver, timeout=600):
         print("[ERROR] Login not detected within timeout.")
         driver.save_screenshot("login_timeout.png")
         return False
+
 
 def main():
     driver = init_driver()
@@ -89,30 +97,37 @@ def main():
         CALL_X_PERCENT = 0.75
         CALL_Y_PERCENT = 0.85
         canvas_rect = canvas.rect
-        call_x = canvas_rect['width'] * CALL_X_PERCENT
-        call_y = canvas_rect['height'] * CALL_Y_PERCENT
+        call_x = canvas_rect["width"] * CALL_X_PERCENT
+        call_y = canvas_rect["height"] * CALL_Y_PERCENT
 
         print("[SUCCESS] Canvas found. Bot started: auto-clicking CALL every 5 seconds...")
 
         # Auto-click loop
         while True:
             try:
+                # Ensure canvas is visible
+                driver.execute_script("arguments[0].scrollIntoView(true);", canvas)
+
                 driver.execute_script(
                     "const canvas=arguments[0]; const x=arguments[1]; const y=arguments[2];"
                     "canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:x, clientY:y,bubbles:true}));"
                     "canvas.dispatchEvent(new MouseEvent('mouseup',{clientX:x, clientY:y,bubbles:true}));",
-                    canvas, call_x, call_y
+                    canvas,
+                    call_x,
+                    call_y,
                 )
                 print("[CLICK] CALL clicked")
                 time.sleep(5)
             except WebDriverException as e:
                 print(f"[ERROR] WebDriver exception during click: {e}")
+                driver.save_screenshot(f"click_error_{int(time.time())}.png")
                 time.sleep(5)
 
     except Exception as e:
         print(f"[FATAL] Unexpected error: {e}")
     finally:
         safe_quit(driver)
+
 
 if __name__ == "__main__":
     while True:
