@@ -39,32 +39,39 @@ def safe_quit(driver):
     except Exception:
         pass
 
+def wait_for_manual_login(driver, timeout=600):
+    """Wait for manual login to complete. Detect any stable post-login element."""
+    print("[INFO] Waiting for manual login...")
+    wait = WebDriverWait(driver, timeout)
+    try:
+        # Replace with an element that always exists after login, e.g., cabinet page
+        wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'cabinet-page')]")))
+        print("[SUCCESS] Login detected!")
+        return True
+    except TimeoutException:
+        print("[ERROR] Login not detected within timeout.")
+        driver.save_screenshot("login_timeout.png")
+        return False
+
 def main():
     driver = init_driver()
     if not driver:
         return
 
-    wait = WebDriverWait(driver, 20)
     try:
-        print("[INFO] Open login page...")
+        print("[INFO] Opening login page...")
         driver.get("https://pocketoption.com/en/login/")
 
-        # Wait for manual login: detect balance element
-        try:
-            wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'balance')]")))
-            print("[SUCCESS] Logged in successfully!")
-        except TimeoutException:
-            print("[ERROR] Dashboard did not load. Manual action required.")
-            driver.save_screenshot("login_manual.png")
+        if not wait_for_manual_login(driver):
             safe_quit(driver)
             return
 
-        # Navigate to demo trading page
-        print("[INFO] Opening demo trading page...")
+        print("[INFO] Navigating to demo trading page...")
         driver.get("https://pocketoption.com/en/cabinet/demo-quick-high-low/")
 
-        # Wait for canvas
+        # Wait for canvas element
         canvas = None
+        wait = WebDriverWait(driver, 20)
         for i in range(5):
             try:
                 canvas = wait.until(EC.presence_of_element_located((By.TAG_NAME, "canvas")))
@@ -114,4 +121,4 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"[FATAL] Bot crashed unexpectedly: {e}")
             time.sleep(5)  # wait before restart
-                                                       
+    
