@@ -1,79 +1,63 @@
 import time
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.common.keys import Keys
+import pyautogui
 import os
 
 # -----------------------
-# Chrome options for headless/Xvfb environment
+# Settings
 # -----------------------
-chrome_options = Options()
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-chrome_options.add_experimental_option('useAutomationExtension', False)
+# Coordinates to click on Chrome window inside Xvfb (center of 1920x1080)
+CLICK_X = 960
+CLICK_Y = 540
 
-# Use virtual display from environment (DISPLAY=:1)
-display_env = os.environ.get("DISPLAY", ":1")
-chrome_options.add_argument(f"--display={display_env}")
+# Interval between each trading cycle (seconds)
+TRADE_INTERVAL = 10
+
+# Initial wait to log in manually via noVNC (seconds)
+LOGIN_WAIT = 300  # 5 minutes
 
 # -----------------------
-# Initialize WebDriver
+# Startup
 # -----------------------
-driver = webdriver.Chrome(options=chrome_options)
-driver.get("https://pocketoption.com/en/login/")
+print("[ℹ️] Bot started. Waiting for manual login...")
+time.sleep(LOGIN_WAIT)
 
-print("[ℹ️] Waiting for manual login or cookie-based auto-login...")
-time.sleep(300)  # 5 minutes to log in manually
+# Focus Chrome window by clicking center
+pyautogui.click(x=CLICK_X, y=CLICK_Y)
+time.sleep(1)
 
-# -----------------------
-# Focus the page to send hotkeys
-# -----------------------
-try:
-    body = driver.find_element("tag name", "body")
-    body.click()
-except Exception as e:
-    print(f"[❌] Error focusing page body: {e}")
-
-actions = ActionChains(driver)
-
-# -----------------------
-# Helper function for hotkeys
-# -----------------------
-def press_shift_key(key):
-    """Press a Shift + key combination"""
-    try:
-        actions.key_down(Keys.SHIFT).send_keys(key).key_up(Keys.SHIFT).perform()
-        print(f"[✅] Pressed Shift + {key}")
-        time.sleep(1)  # small delay to ensure PocketOption registers the input
-    except Exception as e:
-        print(f"[❌] Error pressing Shift + {key}: {e}")
+print("[🚀] Starting automated hotkey trading loop...")
 
 # -----------------------
 # Main trading loop
 # -----------------------
-print("[🚀] Starting automated hotkey trading loop...")
-
 while True:
     try:
-        print("[ℹ️] Bot status: Running...")
+        print(f"[ℹ️] Bot status: Running. Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        # 1️⃣ Increase trade amount
-        press_shift_key('d')
+        # 1️⃣ Increase trade amount: Shift + D
+        pyautogui.keyDown('shift')
+        pyautogui.press('d')
+        pyautogui.keyUp('shift')
+        print("[✅] Increased trade amount")
+        time.sleep(1)
 
-        # 2️⃣ Buy trade
-        press_shift_key('w')
+        # 2️⃣ Buy trade: Shift + W
+        pyautogui.keyDown('shift')
+        pyautogui.press('w')
+        pyautogui.keyUp('shift')
+        print("[✅] Buy trade executed")
+        time.sleep(1)
 
-        # 3️⃣ Switch to next favorite asset
-        press_shift_key(Keys.TAB)
+        # 3️⃣ Switch to next favorite asset: Shift + TAB
+        pyautogui.keyDown('shift')
+        pyautogui.press('tab')
+        pyautogui.keyUp('shift')
+        print("[✅] Switched to next asset")
 
-        # Wait 10 seconds before next cycle
-        time.sleep(10)
+        # Wait before next cycle
+        time.sleep(TRADE_INTERVAL)
 
     except Exception as e:
         print(f"[❌] Error in trading loop: {e}")
         time.sleep(5)
-                         
+        
