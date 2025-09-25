@@ -6,6 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from dotenv import load_dotenv
 
@@ -14,10 +15,8 @@ load_dotenv()
 PO_EMAIL = os.getenv("POCKET_EMAIL")
 PO_PASS = os.getenv("POCKET_PASS")
 
-
 def log(msg):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}")
-
 
 def init_driver(retries=3):
     for attempt in range(1, retries + 1):
@@ -28,6 +27,8 @@ def init_driver(retries=3):
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-software-rasterizer")
             chrome_options.add_argument("--window-size=1920,1080")
+            # chrome_options.add_argument("--headless=new")  # optional
+
             driver = webdriver.Chrome(options=chrome_options)
             log(f"ChromeDriver initialized (attempt {attempt}).")
             return driver
@@ -37,7 +38,6 @@ def init_driver(retries=3):
     log("ChromeDriver could not be initialized.")
     return None
 
-
 def safe_quit(driver):
     try:
         if driver:
@@ -45,18 +45,38 @@ def safe_quit(driver):
     except Exception:
         pass
 
+def fill_login_form(driver):
+    log("Opening login page...")
+    driver.get("https://pocketoption.com/en/login/")
+
+    wait = WebDriverWait(driver, 20)
+    try:
+        # Wait for email input field
+        email_input = wait.until(EC.presence_of_element_located((By.NAME, "email")))
+        password_input = driver.find_element(By.NAME, "password")
+
+        # Input credentials
+        email_input.clear()
+        email_input.send_keys(PO_EMAIL)
+        password_input.clear()
+        password_input.send_keys(PO_PASS)
+
+        log("Email and password filled. Please complete any verification and click LOGIN manually.")
+        return True
+    except TimeoutException:
+        log("Login fields not found. Exiting.")
+        return False
 
 def wait_for_manual_login(driver, timeout=600):
     log("Waiting for manual login...")
     wait = WebDriverWait(driver, timeout)
     try:
-        wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'cabinet-page')]")))
-        log("Login detected!")
+        wait.until(EC.url_contains("/cabinet"))
+        log("Manual login detected!")
         return True
     except TimeoutException:
-        log("Manual login not detected within timeout.")
+        log(f"Manual login not detected within {timeout} seconds. Last URL: {driver.current_url}")
         return False
-
 
 def main():
     driver = init_driver()
@@ -64,67 +84,52 @@ def main():
         return
 
     try:
-        log("Opening login page...")
-        driver.get("https://pocketoption.com/en/login/")
-
-        if not wait_for_manual_login(driver):
-            log("Exiting due to missing login.")
+        if not fill_login_form(driver):
             safe_quit(driver)
             return
 
+        # Wait until you manually log in
+        if not wait_for_manual_login(driver):
+            safe_quit(driver)
+            return
+
+        # Navigate to demo trading page
         log("Navigating to demo trading page...")
         driver.get("https://pocketoption.com/en/cabinet/demo-quick-high-low/")
 
-        # Wait for canvas element
-        canvas = None
+        # Wait for CALL button element
         wait = WebDriverWait(driver, 20)
-        for i in range(5):
-            try:
-                canvas = wait.until(EC.presence_of_element_located((By.TAG_NAME, "canvas")))
-                canvas_rect = canvas.rect
-                if canvas_rect['width'] < 100 or canvas_rect['height'] < 100:
-                    log(f"Canvas too small: {canvas_rect}, exiting.")
-                    safe_quit(driver)
-                    return
-                break
-            except TimeoutException:
-                log(f"Canvas not ready yet (attempt {i+1}/5)...")
-                time.sleep(3)
-
-        if not canvas:
-            log("Canvas not found. Exiting.")
+        try:
+            call_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".quick-trade-button-call"))) 
+            log("CALL button found. Ready to auto-click.")
+        except TimeoutException:
+            log("CALL button not found. Exiting.")
             safe_quit(driver)
             return
 
-        call_x = canvas_rect["width"] * 0.75
-        call_y = canvas_rect["height"] * 0.85
+        # Auto-click loop: every 10 seconds, max 10 clicks
+        click_count = 0
+        max_clicks = 10
+        interval_seconds = 10
 
-        log("Canvas ready. Starting auto-click...")
-
-        while True:
+        while click_count < max_clicks:
             try:
-                driver.execute_script("arguments[0].scrollIntoView(true);", canvas)
-                driver.execute_script(
-                    "const canvas=arguments[0]; const x=arguments[1]; const y=arguments[2];"
-                    "canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:x, clientY:y,bubbles:true}));"
-                    "canvas.dispatchEvent(new MouseEvent('mouseup',{clientX:x, clientY:y,bubbles:true}));",
-                    canvas,
-                    call_x,
-                    call_y,
-                )
-                log("CALL clicked")
-                time.sleep(5)
+                ActionChains(driver).move_to_element(call_button).click().perform()
+                click_count += 1
+                log(f"CALL clicked ({click_count}/{max_clicks})")
+                if click_count < max_clicks:
+                    time.sleep(interval_seconds)
             except WebDriverException as e:
-                log(f"Canvas click failed: {e}")
+                log(f"CALL click failed: {e}")
                 time.sleep(5)
+
+        log("Max clicks reached. Exiting.")
 
     except Exception as e:
         log(f"Unexpected error: {e}")
     finally:
         safe_quit(driver)
 
-
 if __name__ == "__main__":
-    # Run main once. Zeabur will restart the container if it fails.
     main()
-            
+    
