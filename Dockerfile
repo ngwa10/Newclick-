@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     libdbus-1-3 libgdk-pixbuf-2.0-0 libnspr4 libnss3 \
     libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
     xdg-utils libgl1 libxrender1 libxext6 \
-    wmctrl python3-tk scrot \
+    libgtk-3-0 python3-tk scrot wmctrl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Google Chrome
@@ -45,5 +45,5 @@ VOLUME /dev/shm
 # Expose VNC and noVNC ports
 EXPOSE 5900 6080
 
-# Start everything with supervisord
-CMD ["/usr/bin/supervisord", "-c", "/app/supervisord.conf"]
+# Start everything with supervisord and keep logs alive for debugging
+CMD ["/bin/bash", "-c", "/usr/bin/supervisord -c /app/supervisord.conf && tail -f /app/bot.log /app/chrome_err.log"]
