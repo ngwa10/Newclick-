@@ -25,9 +25,6 @@ POST_LOGIN_WAIT = 5       # wait after manual login
 # Helper: find Chrome window
 # -----------------------
 def get_chrome_window_position():
-    """
-    Uses wmctrl to find Chrome window in Xvfb and returns top-left coordinates and size.
-    """
     try:
         output = subprocess.check_output(['wmctrl', '-lG']).decode()
         for line in output.splitlines():
@@ -40,9 +37,6 @@ def get_chrome_window_position():
         print(f"[❌] Error finding Chrome window: {e}")
     return 0, 0, 1920, 1080
 
-# -----------------------
-# Wait for Chrome to appear
-# -----------------------
 def wait_for_chrome(timeout=60):
     for _ in range(timeout):
         x, y, w, h = get_chrome_window_position()
@@ -56,8 +50,6 @@ def wait_for_chrome(timeout=60):
 # -----------------------
 def fill_login():
     x, y, w, h = get_chrome_window_position()
-    print(f"[ℹ️] Chrome window position: {x},{y},{w},{h}")
-
     email_x = x + int(w * 0.5)
     email_y = y + int(h * 0.35)
     password_x = x + int(w * 0.5)
@@ -89,6 +81,7 @@ def focus_chrome():
 print("[ℹ️] Waiting for Chrome window to appear...")
 if not wait_for_chrome():
     print("[❌] Chrome window not found. Exiting.")
+    time.sleep(60)
     exit(1)
 
 fill_login()
@@ -105,19 +98,16 @@ while True:
         current_time = time.strftime('%Y-%m-%d %H:%M:%S')
         print(f"[💓 Heartbeat] Bot is alive at {current_time}")
 
-        # Increase trade amount: Shift + D
         pyautogui.keyDown('shift')
         pyautogui.press('d')
         pyautogui.keyUp('shift')
         print(f"[✅ {current_time}] Increased trade amount")
 
-        # Buy trade: Shift + W
         pyautogui.keyDown('shift')
         pyautogui.press('w')
         pyautogui.keyUp('shift')
         print(f"[✅ {current_time}] Buy trade executed")
 
-        # Switch to next asset: Shift + TAB
         pyautogui.keyDown('shift')
         pyautogui.press('tab')
         pyautogui.keyUp('shift')
@@ -129,4 +119,4 @@ while True:
         current_time = time.strftime('%Y-%m-%d %H:%M:%S')
         print(f"[❌ {current_time}] Error in trading loop: {e}")
         time.sleep(5)
-                                          
+    
