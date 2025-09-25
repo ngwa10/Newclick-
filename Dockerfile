@@ -1,4 +1,4 @@
-# Base image
+# Base image.
 FROM python:3.11-slim
 
 # Install dependencies
