@@ -1,4 +1,4 @@
-# Base image.
+# Base image
 FROM python:3.11-slim
 
 # Install dependencies
@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     libdbus-1-3 libgdk-pixbuf-2.0-0 libnspr4 libnss3 \
     libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
     xdg-utils libgl1 libxrender1 libxext6 \
+    wmctrl python3-tk scrot \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Google Chrome
@@ -17,8 +18,8 @@ RUN wget -q -O /usr/share/keyrings/google-linux-signing-key.gpg https://dl.googl
        > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update && apt-get install -y google-chrome-stable
 
-# ✅ Install matching ChromeDriver (fixed unzip path issue)
-RUN CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+") && \
+# Install ChromeDriver
+RUN CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+") && \
     MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d. -f1) && \
     DRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_$MAJOR_VERSION") && \
     wget -q "https://storage.googleapis.com/chrome-for-testing-public/$DRIVER_VERSION/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip && \
