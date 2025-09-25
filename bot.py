@@ -20,6 +20,7 @@ def log(msg):
 
 
 def init_driver(retries=3):
+    """Initialize ChromeDriver with retries."""
     for attempt in range(1, retries + 1):
         try:
             log(f"Initializing ChromeDriver (attempt {attempt})...")
@@ -29,7 +30,7 @@ def init_driver(retries=3):
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-software-rasterizer")
             chrome_options.add_argument("--window-size=1920,1080")
-            chrome_options.add_argument("--headless=new")  # headless mode for container
+            chrome_options.add_argument("--headless=new")  # headless mode
             chrome_options.add_argument("--verbose")
             chrome_options.add_argument("--log-path=/app/chromedriver.log")
 
@@ -44,6 +45,7 @@ def init_driver(retries=3):
 
 
 def safe_quit(driver):
+    """Quit driver safely."""
     try:
         if driver:
             driver.quit()
@@ -53,6 +55,7 @@ def safe_quit(driver):
 
 
 def fill_login_form(driver):
+    """Fill in login credentials but do not submit."""
     try:
         log("Filling login form with credentials from .env...")
         email_field = WebDriverWait(driver, 10).until(
@@ -69,11 +72,15 @@ def fill_login_form(driver):
 
 
 def wait_for_manual_login(driver, timeout=600):
-    log("Waiting for manual login...")
-    wait = WebDriverWait(driver, timeout)
+    """Wait until cabinet/dashboard page is detected."""
+    log("Waiting for manual login (detecting cabinet page)...")
     try:
-        wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class,'cabinet-page')]")))
-        log("Manual login detected!")
+        wait = WebDriverWait(driver, timeout)
+        # Multiple possible selectors for dashboard elements
+        wait.until(EC.presence_of_element_located(
+            (By.CSS_SELECTOR, "div.cabinet-container, div.account-info, header.dashboard-header")
+        ))
+        log("Manual login detected: cabinet page loaded!")
         return True
     except TimeoutException:
         log("Manual login not detected within timeout.")
@@ -81,6 +88,23 @@ def wait_for_manual_login(driver, timeout=600):
     except Exception as e:
         log(f"Error while waiting for manual login: {e}")
         return False
+
+
+def capture_ssid(driver):
+    """Read SSID cookie and save it to a file."""
+    cookies = driver.get_cookies()
+    ssid = None
+    for c in cookies:
+        if c['name'] == 'ssid':
+            ssid = c['value']
+            break
+    if ssid:
+        log(f"SSID captured: {ssid}")
+        with open("/app/ssid.txt", "w") as f:
+            f.write(ssid)
+        log("SSID saved to /app/ssid.txt")
+    else:
+        log("SSID not found.")
 
 
 def main():
@@ -100,58 +124,10 @@ def main():
             safe_quit(driver)
             return
 
-        log("Navigating to demo trading page...")
-        driver.get("https://pocketoption.com/en/cabinet/demo-quick-high-low/")
+        log("Manual login complete. Capturing SSID...")
+        capture_ssid(driver)
 
-        # Wait for canvas element
-        canvas = None
-        wait = WebDriverWait(driver, 20)
-        for i in range(5):
-            try:
-                canvas = wait.until(EC.presence_of_element_located((By.TAG_NAME, "canvas")))
-                canvas_rect = canvas.rect
-                log(f"Canvas found: {canvas_rect}")
-                if canvas_rect['width'] < 100 or canvas_rect['height'] < 100:
-                    log(f"Canvas too small: {canvas_rect}, exiting.")
-                    safe_quit(driver)
-                    return
-                break
-            except TimeoutException:
-                log(f"Canvas not ready yet (attempt {i+1}/5)...")
-                time.sleep(3)
-            except Exception as e:
-                log(f"Error detecting canvas: {e}")
-
-        if not canvas:
-            log("Canvas not found. Exiting.")
-            safe_quit(driver)
-            return
-
-        call_x = canvas_rect["width"] * 0.75
-        call_y = canvas_rect["height"] * 0.85
-
-        log("Canvas ready. Starting auto-click...")
-        click_count = 0
-        max_clicks = 10
-        while click_count < max_clicks:
-            try:
-                driver.execute_script("arguments[0].scrollIntoView(true);", canvas)
-                driver.execute_script(
-                    "const canvas=arguments[0]; const x=arguments[1]; const y=arguments[2];"
-                    "canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:x, clientY:y,bubbles:true}));"
-                    "canvas.dispatchEvent(new MouseEvent('mouseup',{clientX:x, clientY:y,bubbles:true}));",
-                    canvas,
-                    call_x,
-                    call_y,
-                )
-                click_count += 1
-                log(f"CALL clicked ({click_count}/{max_clicks})")
-                time.sleep(10)  # 10 seconds between clicks
-            except WebDriverException as e:
-                log(f"Canvas click failed: {e}")
-                time.sleep(5)
-
-        log("Max clicks reached. Exiting.")
+        log("SSID capture complete. Exiting bot.")
     except Exception as e:
         log(f"Unexpected error: {e}")
     finally:
