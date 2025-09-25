@@ -1,4 +1,5 @@
 import time
+import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
@@ -17,13 +18,13 @@ def get_ssid_from_cookies(driver):
     return None
 
 def main():
-    print("[🚀] Bot started. Waiting for Pocket Option login...")
+    print("[🚀] Bot started. Waiting for SSID to appear in cookies...")
 
+    # Chrome options
     options = Options()
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--headless")  # remove if you want a visible browser
     options.add_argument("--remote-debugging-port=9222")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -32,22 +33,26 @@ def main():
     driver = webdriver.Chrome(options=options)
     driver.get("https://pocketoption.com/en/login/")
 
+    ssid_captured = False
+
     while True:
         try:
-            current_url = driver.current_url.lower()
-            if "cabinet" in current_url or "dashboard" in current_url:
-                print(f"[🔎] Dashboard detected ({current_url})! Trying to capture SSID...")
-                ssid = get_ssid_from_cookies(driver)
-                if ssid:
+            ssid = get_ssid_from_cookies(driver)
+            if ssid:
+                if not ssid_captured:
                     save_ssid(ssid)
+                    ssid_captured = True
+                    print("[✅] SSID successfully captured. Monitoring for changes...")
                 else:
-                    print("[⚠️] Dashboard detected but SSID not yet available. Retrying...")
+                    print("[ℹ️] SSID already captured. No changes detected.")
             else:
-                print(f"[⏳] Still on login page ({current_url}). Waiting for manual login...")
+                print("[⏳] No SSID cookie found yet. Retrying...")
+
         except Exception as e:
-            print(f"[❌] Error checking SSID: {e}")
-        time.sleep(10)
+            print(f"[❌] Error checking cookies: {e}")
+
+        time.sleep(10)  # check every 10 seconds
 
 if __name__ == "__main__":
     main()
-        
+    
