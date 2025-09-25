@@ -1,8 +1,10 @@
 import os
 import time
+import traceback
 import pyautogui
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 
 # -----------------------
 # Environment and settings
@@ -15,20 +17,32 @@ TRADE_INTERVAL = 10  # seconds
 POST_LOGIN_WAIT = 60  # wait after manual login
 
 # -----------------------
+# Small delay to ensure Xvfb/X11 is ready
+# -----------------------
+time.sleep(2)
+
+# -----------------------
 # Start Chrome with Selenium
 # -----------------------
 chrome_options = Options()
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--remote-debugging-port=9222")
 chrome_options.add_argument("--disable-blink-features=AutomationControlled")
 chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
 chrome_options.add_experimental_option('useAutomationExtension', False)
 chrome_options.add_argument("--user-data-dir=/tmp/chrome-user-data")
 
-driver = webdriver.Chrome(options=chrome_options)
-driver.get("https://pocketoption.com/en/login/")
+service = Service("/usr/local/bin/chromedriver")
+
+try:
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.get("https://pocketoption.com/en/login/")
+    print("[✅] Chrome started successfully")
+except Exception:
+    print("[❌] Selenium failed to start Chrome:")
+    traceback.print_exc()
+    raise
 
 # -----------------------
 # Fill email and password
@@ -41,8 +55,9 @@ try:
     password_input.clear()
     password_input.send_keys(PASSWORD)
     print("[✅] Credentials filled. Please click login manually.")
-except Exception as e:
-    print(f"[❌] Error filling credentials: {e}")
+except Exception:
+    print("[❌] Error filling credentials:")
+    traceback.print_exc()
 
 # Wait for manual login
 time.sleep(POST_LOGIN_WAIT)
@@ -77,7 +92,9 @@ while True:
 
         time.sleep(TRADE_INTERVAL)
 
-    except Exception as e:
+    except Exception:
         current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-        print(f"[❌ {current_time}] Error in trading loop: {e}")
+        print(f"[❌ {current_time}] Error in trading loop:")
+        traceback.print_exc()
         time.sleep(5)
+    
