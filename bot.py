@@ -36,7 +36,7 @@ def main():
 
     ssid_captured = False
 
-    # Keep checking for SSID every 10 seconds
+    # Keep checking for SSID every 10 seconds.
     while True:
         try:
             current_url = driver.current_url
