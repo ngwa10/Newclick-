@@ -1,6 +1,12 @@
+import os
 import time
 import pyautogui
 import subprocess
+
+# -----------------------
+# Set DISPLAY for Xvfb
+# -----------------------
+os.environ['DISPLAY'] = ':1'
 
 # -----------------------
 # User Credentials
@@ -32,8 +38,18 @@ def get_chrome_window_position():
                 return x, y, w, h
     except Exception as e:
         print(f"[❌] Error finding Chrome window: {e}")
-    # Fallback
     return 0, 0, 1920, 1080
+
+# -----------------------
+# Wait for Chrome to appear
+# -----------------------
+def wait_for_chrome(timeout=60):
+    for _ in range(timeout):
+        x, y, w, h = get_chrome_window_position()
+        if w > 0 and h > 0:
+            return True
+        time.sleep(1)
+    return False
 
 # -----------------------
 # Fill login credentials
@@ -42,18 +58,15 @@ def fill_login():
     x, y, w, h = get_chrome_window_position()
     print(f"[ℹ️] Chrome window position: {x},{y},{w},{h}")
 
-    # Coordinates relative to Chrome window (approximate)
     email_x = x + int(w * 0.5)
     email_y = y + int(h * 0.35)
     password_x = x + int(w * 0.5)
     password_y = y + int(h * 0.45)
 
-    # Click email field and type
     pyautogui.click(email_x, email_y)
     pyautogui.write(EMAIL, interval=0.05)
     time.sleep(0.5)
 
-    # Click password field and type
     pyautogui.click(password_x, password_y)
     pyautogui.write(PASSWORD, interval=0.05)
     time.sleep(0.5)
@@ -71,14 +84,15 @@ def focus_chrome():
     time.sleep(1)
 
 # -----------------------
-# Startup
+# Main
 # -----------------------
 print("[ℹ️] Waiting for Chrome window to appear...")
-time.sleep(LOGIN_WAIT)
+if not wait_for_chrome():
+    print("[❌] Chrome window not found. Exiting.")
+    exit(1)
 
 fill_login()
 
-# Wait for manual login
 print("[ℹ️] Waiting for manual login...")
 time.sleep(POST_LOGIN_WAIT)
 
@@ -86,9 +100,6 @@ focus_chrome()
 
 print("[🚀] Starting automated hotkey trading loop...")
 
-# -----------------------
-# Main trading loop
-# -----------------------
 while True:
     try:
         current_time = time.strftime('%Y-%m-%d %H:%M:%S')
@@ -112,11 +123,10 @@ while True:
         pyautogui.keyUp('shift')
         print(f"[✅ {current_time}] Switched to next asset")
 
-        # Wait before next cycle
         time.sleep(TRADE_INTERVAL)
 
     except Exception as e:
         current_time = time.strftime('%Y-%m-%d %H:%M:%S')
         print(f"[❌ {current_time}] Error in trading loop: {e}")
         time.sleep(5)
-    
+                                          
