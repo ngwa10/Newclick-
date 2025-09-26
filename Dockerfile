@@ -32,13 +32,20 @@ RUN DRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST
 # 🖥️ Install noVNC
 RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
     && git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify \
-    && ln -s /opt/noVNC /usr/share/novnc
+    && ln -s /opt/noVNC /usr/share/novnc \
+    && chmod +x /opt/noVNC/utils/novnc_proxy
 
 # 📁 Copy app files
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+
+# ✅ Ensure bot script is present and executable
+COPY run_bot.sh /app/
+RUN chmod +x /app/run_bot.sh
+
+# ✅ Copy supervisor config
+COPY supervisord.conf /app/
 
 # 🌐 Expose VNC and noVNC ports
 EXPOSE 5900 6080
