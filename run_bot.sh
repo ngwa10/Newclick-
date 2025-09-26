@@ -1,16 +1,20 @@
 #!/bin/bash
-# Ensure display environment variables are set
-export DISPLAY=:1
-export XAUTHORITY=/tmp/.Xauthority
+# -----------------------
+# run_bot.sh
+# -----------------------
 
-# Create .Xauthority if it does not exist
-if [ ! -f /tmp/.Xauthority ]; then
-    touch /tmp/.Xauthority
-    chmod 600 /tmp/.Xauthority
-    echo "[WARN] Created empty .Xauthority file"
+# Fail immediately if a command fails
+set -e
+
+# Ensure Xauthority and DISPLAY are set
+export XAUTHORITY=/tmp/.Xauthority
+export DISPLAY=:1
+
+# Optional: verify Xvfb is running
+if ! xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then
+    echo "[❌] X server not detected on DISPLAY=$DISPLAY"
+    exit 1
 fi
 
 echo "[🚀] Starting bot.py..."
-sleep 5  # Wait for Xvfb to be fully ready
-
 python3 /app/bot.py
