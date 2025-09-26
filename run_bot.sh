@@ -18,5 +18,5 @@ fi
 
 echo "[🚀] Starting core.py bot..."
 
-# Run the main bot script
-python3 /app/core.py
+# Run the main bot script from root directory
+python3 core.py
