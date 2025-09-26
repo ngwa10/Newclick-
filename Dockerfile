@@ -54,6 +54,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy only contents of the app folder (scripts go directly to /app)
 COPY app/ .
 
+# Copy supervisord.conf explicitly
+COPY supervisord.conf /app/supervisord.conf
+
 # Make scripts executable
 RUN chmod +x /app/run_bot.sh /app/wait_for_vnc.sh /app/wait_for_vnc_then_bot.sh
 
