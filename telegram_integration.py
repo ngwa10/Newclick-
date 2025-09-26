@@ -12,23 +12,21 @@ from datetime import datetime, timedelta
 api_id = int(os.getenv("TELEGRAM_API_ID"))
 api_hash = os.getenv("TELEGRAM_API_HASH")
 bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-channel_env = os.getenv("TELEGRAM_CHANNEL")  # Could be integer ID or username
+channel_env = os.getenv("TELEGRAM_CHANNEL")  # Can be numeric ID (-100...) or username (@channelname)
 
-client = TelegramClient('session_name', api_id, api_hash)
+client = TelegramClient('bot_session', api_id, api_hash)
 
-async def get_channel_entity():
-    """
-    Resolves the Telegram channel to an entity.
-    Works for integer ID or username string.
-    """
+# Resolve channel once at startup
+channel_entity = None
+
+async def resolve_channel():
+    global channel_entity
     try:
-        if channel_env.isdigit():
-            # If numeric ID, convert to int
-            entity = await client.get_input_entity(int(channel_env))
+        if channel_env.startswith("-100") or channel_env.lstrip("-").isdigit():
+            channel_entity = await client.get_entity(int(channel_env))
         else:
-            # If username string, pass as-is
-            entity = await client.get_input_entity(channel_env)
-        return entity
+            channel_entity = await client.get_entity(channel_env)
+        print(f"[✅] Resolved channel: {channel_entity.title if hasattr(channel_entity, 'title') else channel_entity.id}")
     except Exception as e:
         print(f"[❌] Failed to resolve Telegram channel '{channel_env}': {e}")
         raise
@@ -38,16 +36,10 @@ def start_telegram_listener(signal_callback, command_callback):
 
     @client.on(events.NewMessage())
     async def handler(event):
-        # Ensure the message comes from our target channel
-        try:
-            entity = await get_channel_entity()
-        except Exception:
-            return  # Skip if channel resolution failed
-
-        # Handle integer or channel object
-        target_id = getattr(entity, 'channel_id', getattr(entity, 'id', None))
+        # Only process messages from the target channel
+        target_id = getattr(channel_entity, 'id', None)
         if event.chat_id != target_id:
-            return  # Ignore messages from other chats
+            return
 
         text = event.message.message
         print(f"[📩] New message received: {text}")
@@ -64,7 +56,9 @@ def start_telegram_listener(signal_callback, command_callback):
     try:
         print("[⚙️] Connecting to Telegram...")
         client.start(bot_token=bot_token)
-        print("[✅] Connected to Telegram. Listening for messages...")
+        print("[✅] Connected to Telegram. Resolving channel...")
+        client.loop.run_until_complete(resolve_channel())
+        print("[✅] Listening for messages...")
         client.run_until_disconnected()
     except Exception as e:
         print(f"[❌] Telegram listener failed: {e}")
@@ -125,4 +119,4 @@ def parse_signal(message_text):
         print(f"[🔁] Default Anna martingale times applied: {result['martingale_times']}")
 
     return result
-            
+        
