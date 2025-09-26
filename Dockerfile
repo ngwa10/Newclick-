@@ -1,4 +1,6 @@
+# -----------------------
 # Base image
+# -----------------------
 FROM python:3.11-slim
 
 # -----------------------
@@ -47,7 +49,12 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
+
+# Make run_bot.sh executable
+COPY run_bot.sh /app/run_bot.sh
+RUN chmod +x /app/run_bot.sh
 
 # -----------------------
 # Increase /dev/shm for Chrome
@@ -62,4 +69,4 @@ EXPOSE 5900 6080
 # -----------------------
 # Start supervisord
 # -----------------------
-CMD ["/bin/bash", "-c", "/usr/bin/supervisord -c /app/supervisord.conf && tail -f /app/bot.log /app/bot_err.log"]
+CMD ["/bin/bash", "-c", "/usr/bin/supervisord -c /app/supervisord.conf"]
