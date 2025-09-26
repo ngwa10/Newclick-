@@ -16,5 +16,7 @@ if ! xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "[🚀] Starting bot.py..."
-python3 /app/bot.py
+echo "[🚀] Starting core.py bot..."
+
+# Run the main bot script
+python3 /app/core.py
