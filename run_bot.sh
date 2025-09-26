@@ -1,12 +1,16 @@
 #!/bin/bash
-# Ensure display environment variables are set for PyAutoGUI and Chrome
+# Ensure display environment variables are set
 export DISPLAY=:1
 export XAUTHORITY=/tmp/.Xauthority
 
+# Create .Xauthority if it does not exist
+if [ ! -f /tmp/.Xauthority ]; then
+    touch /tmp/.Xauthority
+    chmod 600 /tmp/.Xauthority
+    echo "[WARN] Created empty .Xauthority file"
+fi
+
 echo "[🚀] Starting bot.py..."
+sleep 5  # Wait for Xvfb to be fully ready
 
-# Optional: wait a few seconds for Xvfb and Chrome to fully start
-sleep 5
-
-# Run the Python script
 python3 /app/bot.py
