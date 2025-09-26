@@ -10,6 +10,11 @@ from selenium.webdriver.chrome.service import Service
 # Environment and settings
 # -----------------------
 os.environ['DISPLAY'] = ':1'
+os.environ['XAUTHORITY'] = '/tmp/.Xauthority'
+
+# Create empty .Xauthority if missing (optional safety)
+if not os.path.exists('/tmp/.Xauthority'):
+    open('/tmp/.Xauthority', 'a').close()
 
 EMAIL = "mylivemyfuture@123gmail.com"
 PASSWORD = "AaCcWw3468,"
@@ -17,7 +22,7 @@ TRADE_INTERVAL = 10  # seconds
 POST_LOGIN_WAIT = 60  # wait after manual login
 
 # -----------------------
-# Small delay to ensure Xvfb/X11 is ready
+# Delay to ensure Xvfb is ready
 # -----------------------
 time.sleep(2)
 
