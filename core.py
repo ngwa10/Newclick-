@@ -1,169 +1,115 @@
-# core.py
+# telegram_integration.py
 """
-Core logic for Pocket Option Telegram Trading Bot.
-Includes: main bot orchestrator, trade manager, Telegram listener, hotkey control, result detection.
+Telegram integration: Listener and signal parser.
+Includes automatic .env loading and runtime logs.
 """
 
 import os
-import time
-import traceback
-import sys
-import pyautogui
-import pytesseract
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import WebDriverException, NoSuchElementException
-from telegram_integration import start_telegram_listener, parse_signal
+import re
+from datetime import datetime, timedelta
+from telethon import TelegramClient, events
+from dotenv import load_dotenv
 
 # -----------------------
-# Force stdout flush so logs show immediately
+# Load environment variables
 # -----------------------
-sys.stdout.reconfigure(line_buffering=True)
-sys.stderr.reconfigure(line_buffering=True)
+env_path = '/app/.env'
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+    print(f"[🟢] Loaded environment variables from {env_path}")
+else:
+    print(f"[⚠️] .env file not found at {env_path}, relying on system environment variables")
 
-print("[🟢] core.py starting...")
+# Read Telegram credentials
+api_id = os.getenv("TELEGRAM_API_ID")
+api_hash = os.getenv("TELEGRAM_API_HASH")
+bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+channel = os.getenv("TELEGRAM_CHANNEL")
+
+print(f"[🔑] Telegram API ID: {'SET' if api_id else 'MISSING'}")
+print(f"[🔑] Telegram API HASH: {'SET' if api_hash else 'MISSING'}")
+print(f"[🔑] Telegram BOT TOKEN: {'SET' if bot_token else 'MISSING'}")
+print(f"[🔑] Telegram CHANNEL: {channel if channel else 'MISSING'}")
+
+if not api_id or not api_hash:
+    raise ValueError("Telegram API ID or HASH missing. Check your .env file or environment variables.")
+
+# Initialize client
+client = TelegramClient('session_name', api_id, api_hash)
 
 # -----------------------
-# Environment for Xvfb/VNC
+# Listener
 # -----------------------
-os.environ['DISPLAY'] = ':1'
-os.environ['XAUTHORITY'] = '/tmp/.Xauthority'
-
-if not os.path.exists('/tmp/.Xauthority'):
-    open('/tmp/.Xauthority', 'a').close()
-    print("[WARN] Created empty .Xauthority file. Ensure Xvfb is running correctly.")
-
-# -----------------------
-# Pocket Option credentials
-# -----------------------
-EMAIL = os.getenv("POCKET_OPTION_EMAIL", "mylivemyfuture@123gmail.com")
-PASSWORD = os.getenv("POCKET_OPTION_PASSWORD", "AaCcWw3468,")
-POST_LOGIN_WAIT = 180  # seconds to wait for manual login
-
-# -----------------------
-# Selenium Chrome driver setup
-# -----------------------
-def setup_driver():
-    print("[⌛] Waiting 5 seconds to ensure Xvfb/VNC is ready...")
-    time.sleep(5)
-    driver = None
-    try:
-        chrome_options = Options()
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--start-maximized")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        chrome_options.add_argument("--user-data-dir=/tmp/chrome-user-data")
-
-        service = Service("/usr/local/bin/chromedriver")
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.get("https://pocketoption.com/en/login/")
-        print("[✅] Chrome started successfully and navigated to login page.")
-
-        # Fill credentials for manual login
+def start_telegram_listener(signal_callback, command_callback):
+    @client.on(events.NewMessage(chats=channel))
+    async def handler(event):
+        text = event.message.message
+        print(f"[📩] New message received: {text}")
         try:
-            time.sleep(3)
-            email_input = driver.find_element(By.NAME, "email")
-            password_input = driver.find_element(By.NAME, "password")
-            email_input.clear()
-            email_input.send_keys(EMAIL)
-            password_input.clear()
-            password_input.send_keys(PASSWORD)
-            print("[✅] Credentials filled. Complete CAPTCHA and login manually via VNC.")
-            print(f"[🚨] Waiting {POST_LOGIN_WAIT} seconds for manual login...")
-        except NoSuchElementException:
-            print("[❌] Could not find email or password input fields. Page layout may have changed.", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
-            raise
+            if text.startswith("/start") or text.startswith("/stop"):
+                print(f"[📢] Command detected: {text}")
+                await command_callback(text)
+            else:
+                signal = parse_signal(text)
+                if signal['currency_pair'] and signal['entry_time']:
+                    print(f"[⚡] Signal parsed: {signal}")
+                    await signal_callback(signal)
         except Exception as e:
-            print(f"[❌] Error filling credentials: {e}", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
-            raise
+            print(f"[❌] Error handling message: {e}")
 
-        time.sleep(POST_LOGIN_WAIT)
-        print("[🟢] Manual login wait period ended. Assuming logged in.")
-        return driver
-
-    except WebDriverException as e:
-        print(f"[❌] WebDriver error: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        raise
-    except Exception as e:
-        print(f"[❌] Unhandled error occurred: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        raise
+    print("[🟢] Starting Telegram client...")
+    client.start(bot_token=bot_token)
+    client.run_until_disconnected()
 
 # -----------------------
-# Trade Manager
+# Signal parser
 # -----------------------
-class TradeManager:
-    def __init__(self, driver):
-        self.trading_active = False
-        self.martingale_level = 0
-        self.base_amount = 1  # TODO: Load from config or env
-        self.max_martingale = 2  # Default to 2 for Anna signals
-        self.driver = driver
+def parse_signal(message_text):
+    result = {
+        "currency_pair": None,
+        "direction": None,
+        "entry_time": None,
+        "timeframe": None,
+        "martingale_times": []
+    }
 
-    def handle_signal(self, signal):
-        if not self.trading_active:
-            print("[⏸️] Trading paused. Signal ignored.")
-            return
+    # Parse currency pair
+    pair_match = re.search(r'(?:Pair:|CURRENCY PAIR:|🇺🇸|📊)\s*([\w\/\-]+)', message_text)
+    if pair_match:
+        result['currency_pair'] = pair_match.group(1).strip()
 
-        # Selenium selects currency and timeframe (assumes functions exist)
-        from selenium_integration import select_currency_pair, select_timeframe
-        select_currency_pair(self.driver, signal['currency_pair'])
-        select_timeframe(self.driver, signal['timeframe'])
-        print(f"[⚡] Ready for trade: {signal}")
+    # Parse direction
+    direction_match = re.search(r'(BUY|SELL|CALL|PUT|🔼|🟥|🟩)', message_text, re.IGNORECASE)
+    if direction_match:
+        direction = direction_match.group(1).upper()
+        if direction in ['CALL', 'BUY', '🟩', '🔼']:
+            result['direction'] = 'BUY'
+        else:
+            result['direction'] = 'SELL'
 
-        self.schedule_trade(signal['entry_time'], signal['direction'], self.base_amount, martingale_level=0)
-        for i, mg_time in enumerate(signal['martingale_times']):
-            self.schedule_trade(mg_time, signal['direction'], self.base_amount * (2 ** (i+1)), martingale_level=i+1)
+    # Parse entry time
+    entry_time_match = re.search(r'(?:Entry Time:|Entry at|TIME \(UTC-03:00\):)\s*(\d{2}:\d{2}(?::\d{2})?)', message_text)
+    if entry_time_match:
+        result['entry_time'] = entry_time_match.group(1)
 
-    def handle_command(self, command):
-        if command.startswith("/start"):
-            self.trading_active = True
-            print("[🚀] Trading started by user command.")
-        elif command.startswith("/stop"):
-            self.trading_active = False
-            print("[⏹️] Trading stopped by user command.")
+    # Parse timeframe
+    timeframe_match = re.search(r'Expiration:?\s*(M1|M5|1 Minute|5 Minute)', message_text)
+    if timeframe_match:
+        tf = timeframe_match.group(1)
+        result['timeframe'] = 'M1' if tf in ['M1', '1 Minute'] else 'M5'
 
-    def schedule_trade(self, entry_time, direction, amount, martingale_level):
-        print(f"[⏰] Scheduling trade at {entry_time} | {direction} | amount: {amount} | level: {martingale_level}")
-        # TODO: Implement scheduling and execution logic
+    # Parse martingale times
+    martingale_matches = re.findall(r'(?:Level \d+|level(?: at)?|PROTECTION).*?\s*(\d{2}:\d{2})', message_text)
+    result['martingale_times'] = martingale_matches
 
-    def place_trade(self, amount=None, direction="BUY"):
-        # Hotkey automation (triggered only on signal)
-        if direction.upper() == "BUY":
-            pyautogui.keyDown('shift'); pyautogui.press('w'); pyautogui.keyUp('shift')
-        elif direction.upper() == "SELL":
-            pyautogui.keyDown('shift'); pyautogui.press('s'); pyautogui.keyUp('shift')
-        print(f"[🎯] Trade placed: {direction} | amount: {amount}")
+    # Default martingale for Anna signals
+    if "anna signals" in message_text.lower() and not result['martingale_times']:
+        fmt = "%H:%M:%S" if result['entry_time'] and len(result['entry_time']) == 8 else "%H:%M"
+        entry_dt = datetime.strptime(result['entry_time'], fmt)
+        interval = 1 if result['timeframe'] == "M1" else 5
+        result['martingale_times'] = [
+            (entry_dt + timedelta(minutes=interval * i)).strftime(fmt)
+            for i in range(1, 3)
+        ]
 
-# -----------------------
-# Main Bot
-# -----------------------
-def main():
-    driver = setup_driver()
-    trade_manager = TradeManager(driver)
-    start_telegram_listener(trade_manager.handle_signal, trade_manager.handle_command)
-    print("[🟢] Bot started! Waiting for signals...")
-
-    try:
-        while True:
-            time.sleep(1)  # keep alive, trading is event-driven via Telegram signals
-    except KeyboardInterrupt:
-        print("[🛑] Bot stopped by user.")
-    finally:
-        if driver:
-            print("[🧹] Quitting Chrome browser.")
-            driver.quit()
-        print("[🛑] core.py finished.")
-
-if __name__ == "__main__":
-    main()
-        
+    return result
