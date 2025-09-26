@@ -1,15 +1,22 @@
 #!/bin/bash
-# wait_for_vnc_then_bot.sh
-# Wait until the VNC server is up before launching the bot.
+# wait_for_vnc.sh
+# Wait until the VNC server is running before starting noVNC proxy.
 
-echo "[wait_for_vnc_then_bot] Waiting for VNC server before launching the bot..."
+echo "[wait_for_vnc] Waiting for VNC server on port 5901..."
 
-# Wait for VNC port
-while ! nc -z localhost 5901; do
+# Wait for VNC port with timeout
+timeout=60
+while ! nc -z localhost 5901 && [ $timeout -gt 0 ]; do
   sleep 1
+  timeout=$((timeout - 1))
 done
 
-echo "[wait_for_vnc_then_bot] ✅ VNC server is up. Starting bot..."
+if [ $timeout -eq 0 ]; then
+  echo "[❌] Timeout waiting for VNC server"
+  exit 1
+fi
 
-# Start your bot
-exec /app/run_bot.sh
+echo "[wait_for_vnc] ✅ VNC server detected. Launching noVNC..."
+
+# Start noVNC proxy and listen on all interfaces
+exec /opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 0.0.0.0:6080 --web /opt/noVNC
