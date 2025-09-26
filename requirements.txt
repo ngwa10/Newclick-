@@ -1,4 +1,8 @@
+# EDIT
+
+telethon
 selenium
-python-dotenv
 pyautogui
+pytesseract
 pillow
+python-dotenv
