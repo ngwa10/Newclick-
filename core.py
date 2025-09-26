@@ -1,17 +1,106 @@
-# CREATE
-
+# core.py
 """
 Core logic for Pocket Option Telegram Trading Bot.
-Includes: main bot orchestrator, trade manager, hotkey control, result detection.
-All actions are logged to console for runtime monitoring.
+Includes: main bot orchestrator, trade manager, Telegram listener, hotkey control, result detection.
 """
 
+import os
 import time
-from selenium_integration import setup_driver, select_currency_pair, select_timeframe
-from telegram_integration import start_telegram_listener
+import traceback
+import sys
 import pyautogui
 import pytesseract
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import WebDriverException, NoSuchElementException
+from telegram_integration import start_telegram_listener, parse_signal
 
+# -----------------------
+# Force stdout flush so logs show immediately
+# -----------------------
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
+print("[🟢] core.py starting...")
+
+# -----------------------
+# Environment for Xvfb/VNC
+# -----------------------
+os.environ['DISPLAY'] = ':1'
+os.environ['XAUTHORITY'] = '/tmp/.Xauthority'
+
+if not os.path.exists('/tmp/.Xauthority'):
+    open('/tmp/.Xauthority', 'a').close()
+    print("[WARN] Created empty .Xauthority file. Ensure Xvfb is running correctly.")
+
+# -----------------------
+# Pocket Option credentials
+# -----------------------
+EMAIL = os.getenv("POCKET_OPTION_EMAIL", "mylivemyfuture@123gmail.com")
+PASSWORD = os.getenv("POCKET_OPTION_PASSWORD", "AaCcWw3468,")
+POST_LOGIN_WAIT = 180  # seconds to wait for manual login
+
+# -----------------------
+# Selenium Chrome driver setup
+# -----------------------
+def setup_driver():
+    print("[⌛] Waiting 5 seconds to ensure Xvfb/VNC is ready...")
+    time.sleep(5)
+    driver = None
+    try:
+        chrome_options = Options()
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--start-maximized")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_argument("--user-data-dir=/tmp/chrome-user-data")
+
+        service = Service("/usr/local/bin/chromedriver")
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.get("https://pocketoption.com/en/login/")
+        print("[✅] Chrome started successfully and navigated to login page.")
+
+        # Fill credentials for manual login
+        try:
+            time.sleep(3)
+            email_input = driver.find_element(By.NAME, "email")
+            password_input = driver.find_element(By.NAME, "password")
+            email_input.clear()
+            email_input.send_keys(EMAIL)
+            password_input.clear()
+            password_input.send_keys(PASSWORD)
+            print("[✅] Credentials filled. Complete CAPTCHA and login manually via VNC.")
+            print(f"[🚨] Waiting {POST_LOGIN_WAIT} seconds for manual login...")
+        except NoSuchElementException:
+            print("[❌] Could not find email or password input fields. Page layout may have changed.", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            raise
+        except Exception as e:
+            print(f"[❌] Error filling credentials: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            raise
+
+        time.sleep(POST_LOGIN_WAIT)
+        print("[🟢] Manual login wait period ended. Assuming logged in.")
+        return driver
+
+    except WebDriverException as e:
+        print(f"[❌] WebDriver error: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        raise
+    except Exception as e:
+        print(f"[❌] Unhandled error occurred: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        raise
+
+# -----------------------
+# Trade Manager
+# -----------------------
 class TradeManager:
     def __init__(self, driver):
         self.trading_active = False
@@ -19,14 +108,14 @@ class TradeManager:
         self.base_amount = 1  # TODO: Load from config or env
         self.max_martingale = 2  # Default to 2 for Anna signals
         self.driver = driver
-        print("[ℹ️] TradeManager initialized.")
 
     def handle_signal(self, signal):
-        print(f"[📥] Handling signal: {signal}")
         if not self.trading_active:
             print("[⏸️] Trading paused. Signal ignored.")
             return
 
+        # Selenium selects currency and timeframe (assumes functions exist)
+        from selenium_integration import select_currency_pair, select_timeframe
         select_currency_pair(self.driver, signal['currency_pair'])
         select_timeframe(self.driver, signal['timeframe'])
         print(f"[⚡] Ready for trade: {signal}")
@@ -36,7 +125,6 @@ class TradeManager:
             self.schedule_trade(mg_time, signal['direction'], self.base_amount * (2 ** (i+1)), martingale_level=i+1)
 
     def handle_command(self, command):
-        print(f"[💻] Handling command: {command}")
         if command.startswith("/start"):
             self.trading_active = True
             print("[🚀] Trading started by user command.")
@@ -46,76 +134,36 @@ class TradeManager:
 
     def schedule_trade(self, entry_time, direction, amount, martingale_level):
         print(f"[⏰] Scheduling trade at {entry_time} | {direction} | amount: {amount} | level: {martingale_level}")
-        # TODO: Implement actual timing mechanism for trade execution
-
-    def post_trade(self, trade_result, amount, martingale_level):
-        print(f"[📊] Post-trade result: {trade_result} | amount: {amount} | level: {martingale_level}")
-        if trade_result == "win":
-            print("[✅] Trade won. Resetting martingale.")
-            self.martingale_level = 0
-            self.reset_trade_amount()
-        elif trade_result == "loss":
-            if martingale_level < self.max_martingale:
-                self.martingale_level += 1
-                print("[🔁] Scheduling martingale trade...")
-                # TODO: Schedule next martingale trade
-            else:
-                print("[🛑] Max martingale reached. Resetting.")
-                self.reset_trade_amount()
-        else:
-            print("[❓] Unknown result. Retrying detection.")
+        # TODO: Implement scheduling and execution logic
 
     def place_trade(self, amount=None, direction="BUY"):
-        print(f"[🎯] Placing trade: {direction} | amount: {amount}")
-        # Hotkey automation
-        if amount:
-            # TODO: Adjust trade amount via hotkeys
-            pass
+        # Hotkey automation (triggered only on signal)
         if direction.upper() == "BUY":
             pyautogui.keyDown('shift'); pyautogui.press('w'); pyautogui.keyUp('shift')
         elif direction.upper() == "SELL":
             pyautogui.keyDown('shift'); pyautogui.press('s'); pyautogui.keyUp('shift')
+        print(f"[🎯] Trade placed: {direction} | amount: {amount}")
 
-    def reset_trade_amount(self):
-        print("[🔄] Reset trade amount to base.")
-        # TODO: Send hotkeys to reset amount
-
-    def detect_trade_result_ocr(self, region=None):
-        image = pyautogui.screenshot(region=region)
-        text = pytesseract.image_to_string(image).lower()
-        print(f"[🖼️] OCR result: {text.strip()}")
-        if "win" in text or "+$" in text:
-            return "win"
-        elif "loss" in text or "-$" in text:
-            return "loss"
-        return None
-
-    def fast_trade_result_detection(self, ocr_region=None, timeout=10, poll_interval=1):
-        print("[⏱️] Starting fast trade result detection...")
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            result = self.detect_trade_result_ocr(region=ocr_region)
-            if result:
-                print(f"[📈] Trade result detected: {result}")
-                return result
-            time.sleep(poll_interval)
-        print("[⏳] Trade result detection timed out.")
-        return None
-
+# -----------------------
+# Main Bot
+# -----------------------
 def main():
-    print("[🔧] Setting up Selenium driver...")
     driver = setup_driver()
     trade_manager = TradeManager(driver)
-    print("[🔌] Starting Telegram listener...")
     start_telegram_listener(trade_manager.handle_signal, trade_manager.handle_command)
     print("[🟢] Bot started! Waiting for signals...")
 
     try:
         while True:
-            time.sleep(1)  # Keep main thread alive
+            time.sleep(1)  # keep alive, trading is event-driven via Telegram signals
     except KeyboardInterrupt:
         print("[🛑] Bot stopped by user.")
+    finally:
+        if driver:
+            print("[🧹] Quitting Chrome browser.")
+            driver.quit()
+        print("[🛑] core.py finished.")
 
 if __name__ == "__main__":
     main()
-            
+        
