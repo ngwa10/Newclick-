@@ -49,12 +49,16 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
 COPY . .
 
 # Make run_bot.sh executable
 COPY run_bot.sh /app/run_bot.sh
 RUN chmod +x /app/run_bot.sh
+
+# -----------------------
+# Ensure Xauthority exists
+# -----------------------
+RUN touch /tmp/.Xauthority && chmod 600 /tmp/.Xauthority
 
 # -----------------------
 # Increase /dev/shm for Chrome
