@@ -1,10 +1,41 @@
 import os
 import time
 import traceback
+import sys
 import pyautogui
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+
+# -----------------------
+# Redirect all prints and uncaught exceptions to a log file
+# -----------------------
+LOG_FILE = "/app/full_bot_errors.log"
+
+class Logger:
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.log = open(filename, "a", buffering=1)  # line-buffered
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+
+sys.stdout = sys.stderr = Logger(LOG_FILE)
+
+# Catch all uncaught exceptions
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    print("Unhandled exception:", file=sys.stderr)
+    traceback.print_exception(exc_type, exc_value, exc_traceback, file=sys.stderr)
+
+sys.excepthook = handle_exception
 
 # -----------------------
 # Environment and settings
@@ -102,4 +133,3 @@ while True:
         print(f"[❌ {current_time}] Error in trading loop:")
         traceback.print_exc()
         time.sleep(5)
-    
