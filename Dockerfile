@@ -50,7 +50,9 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+
+# Copy only contents of the app folder (scripts go directly to /app)
+COPY app/ .
 
 # Make scripts executable
 RUN chmod +x /app/run_bot.sh /app/wait_for_vnc.sh /app/wait_for_vnc_then_bot.sh
