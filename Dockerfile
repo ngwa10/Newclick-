@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
     xdg-utils libgl1 libxrender1 libxext6 \
     libgtk-3-0 python3-tk scrot wmctrl \
+    netcat \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------
@@ -51,9 +52,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Make run_bot.sh executable
-COPY run_bot.sh /app/run_bot.sh
-RUN chmod +x /app/run_bot.sh
+# Make all scripts executable
+RUN chmod +x /app/run_bot.sh \
+            /app/wait_for_vnc.sh \
+            /app/wait_for_vnc_then_bot.sh
 
 # -----------------------
 # Ensure Xauthority exists
