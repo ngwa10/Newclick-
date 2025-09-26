@@ -44,7 +44,9 @@ def start_telegram_listener(signal_callback, command_callback):
         except Exception:
             return  # Skip if channel resolution failed
 
-        if event.chat_id != entity.channel_id:
+        # Handle integer or channel object
+        target_id = getattr(entity, 'channel_id', getattr(entity, 'id', None))
+        if event.chat_id != target_id:
             return  # Ignore messages from other chats
 
         text = event.message.message
@@ -67,4 +69,60 @@ def start_telegram_listener(signal_callback, command_callback):
     except Exception as e:
         print(f"[❌] Telegram listener failed: {e}")
 
-# parse_signal() remains unchanged
+
+def parse_signal(message_text):
+    """
+    Parses trading signals from a Telegram message text.
+    Returns a dictionary with:
+    currency_pair, direction, entry_time, timeframe, martingale_times
+    """
+    result = {
+        "currency_pair": None,
+        "direction": None,
+        "entry_time": None,
+        "timeframe": None,
+        "martingale_times": []
+    }
+
+    # Currency pair
+    pair_match = re.search(r'(?:Pair:|CURRENCY PAIR:|🇺🇸|📊)\s*([\w\/\-]+)', message_text)
+    if pair_match:
+        result['currency_pair'] = pair_match.group(1).strip()
+
+    # Direction
+    direction_match = re.search(r'(BUY|SELL|CALL|PUT|🔼|🟥|🟩)', message_text, re.IGNORECASE)
+    if direction_match:
+        direction = direction_match.group(1).upper()
+        if direction in ['CALL', 'BUY', '🟩', '🔼']:
+            result['direction'] = 'BUY'
+        else:
+            result['direction'] = 'SELL'
+
+    # Entry time
+    entry_time_match = re.search(r'(?:Entry Time:|Entry at|TIME \(UTC-03:00\):)\s*(\d{2}:\d{2}(?::\d{2})?)', message_text)
+    if entry_time_match:
+        result['entry_time'] = entry_time_match.group(1)
+
+    # Timeframe
+    timeframe_match = re.search(r'Expiration:?\s*(M1|M5|1 Minute|5 Minute)', message_text)
+    if timeframe_match:
+        tf = timeframe_match.group(1)
+        result['timeframe'] = 'M1' if tf in ['M1', '1 Minute'] else 'M5'
+
+    # Martingale times
+    martingale_matches = re.findall(r'(?:Level \d+|level(?: at)?|PROTECTION).*?\s*(\d{2}:\d{2})', message_text)
+    result['martingale_times'] = martingale_matches
+
+    # Default Anna signals martingale logic (2 levels)
+    if "anna signals" in message_text.lower() and not result['martingale_times']:
+        fmt = "%H:%M:%S" if result['entry_time'] and len(result['entry_time']) == 8 else "%H:%M"
+        entry_dt = datetime.strptime(result['entry_time'], fmt)
+        interval = 1 if result['timeframe'] == "M1" else 5
+        result['martingale_times'] = [
+            (entry_dt + timedelta(minutes=interval * i)).strftime(fmt)
+            for i in range(1, 3)
+        ]
+        print(f"[🔁] Default Anna martingale times applied: {result['martingale_times']}")
+
+    return result
+            
