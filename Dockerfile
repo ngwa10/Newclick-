@@ -1,11 +1,5 @@
-# -----------------------
-# Base image
-# -----------------------
 FROM python:3.11-slim
 
-# -----------------------
-# Install system dependencies
-# -----------------------
 RUN apt-get update && apt-get install -y \
     wget gnupg unzip curl x11vnc xvfb net-tools git python3-pip \
     supervisor fonts-liberation libappindicator3-1 \
@@ -17,17 +11,11 @@ RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-# -----------------------
-# Install Google Chrome
-# -----------------------
 RUN wget -q -O /usr/share/keyrings/google-linux-signing-key.gpg https://dl.google.com/linux/linux_signing_key.pub \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux-signing-key.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
        > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update && apt-get install -y google-chrome-stable
 
-# -----------------------
-# Install ChromeDriver
-# -----------------------
 RUN CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+") && \
     MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d. -f1) && \
     DRIVER_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_$MAJOR_VERSION") && \
@@ -37,45 +25,22 @@ RUN CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+\.[0-9]+\.[0-9]+\
     chmod +x /usr/local/bin/chromedriver && \
     rm -rf /tmp/*
 
-# -----------------------
-# Install noVNC
-# -----------------------
 RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
     && git clone https://github.com/novnc/websockify /opt/noVNC/utils/websockify \
     && chmod +x /opt/noVNC/utils/novnc_proxy
 
-# -----------------------
-# Copy app and install Python dependencies
-# -----------------------
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy only contents of the app folder (scripts go directly to /app)
 COPY app/ .
-
-# Copy supervisord.conf explicitly
 COPY supervisord.conf /app/supervisord.conf
 
-# Make scripts executable
 RUN chmod +x /app/run_bot.sh /app/wait_for_vnc.sh /app/wait_for_vnc_then_bot.sh
-
-# -----------------------
-# Ensure Xauthority exists
-# -----------------------
 RUN touch /tmp/.Xauthority && chmod 600 /tmp/.Xauthority
 
-# -----------------------
-# Increase /dev/shm for Chrome
-# -----------------------
 VOLUME /dev/shm
 
-# -----------------------
-# Expose VNC and noVNC ports
-# -----------------------
-EXPOSE 5900 6080
+EXPOSE 5901 6080
 
-# -----------------------
-# Start supervisord
-# -----------------------
 CMD ["/bin/bash", "-c", "/usr/bin/supervisord -c /app/supervisord.conf"]
