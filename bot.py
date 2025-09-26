@@ -1,4 +1,9 @@
 # bot_setup.py
+"""
+Setup Chrome WebDriver for Pocket Option automation.
+Loads credentials from .env and ensures Xvfb/VNC environment is ready.
+"""
+
 import os
 import time
 import traceback
@@ -8,6 +13,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import WebDriverException, NoSuchElementException
+from dotenv import load_dotenv
 
 # -----------------------
 # Force stdout flush so logs show immediately
@@ -16,6 +22,16 @@ sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
 print("[🟢] bot_setup.py starting...")
+
+# -----------------------
+# Load environment variables
+# -----------------------
+env_path = '/app/.env'
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+    print(f"[🟢] Loaded environment variables from {env_path}")
+else:
+    print(f"[⚠️] .env file not found at {env_path}, relying on system environment variables")
 
 # -----------------------
 # Environment variables for Xvfb/VNC
@@ -30,9 +46,15 @@ if not os.path.exists('/tmp/.Xauthority'):
 # -----------------------
 # Credentials and settings
 # -----------------------
-EMAIL = os.getenv("POCKET_OPTION_EMAIL", "mylivemyfuture@123gmail.com")
-PASSWORD = os.getenv("POCKET_OPTION_PASSWORD", "AaCcWw3468,")
-POST_LOGIN_WAIT = 180  # seconds to wait for manual login
+EMAIL = os.getenv("POCKET_EMAIL")
+PASSWORD = os.getenv("POCKET_PASS")
+POST_LOGIN_WAIT = int(os.getenv("POST_LOGIN_WAIT", 180))
+
+if not EMAIL or not PASSWORD:
+    print("[❌] Pocket Option email or password is missing. Check your .env file.")
+    raise ValueError("Missing Pocket Option credentials in environment variables.")
+
+print(f"[🔑] Pocket Option email loaded: {EMAIL}")
 
 # -----------------------
 # Delay to ensure Xvfb/VNC/Desktop environment is ready
@@ -90,8 +112,10 @@ try:
 except WebDriverException as e:
     print(f"[❌] WebDriver error: {e}", file=sys.stderr)
     traceback.print_exc(file=sys.stderr)
+    raise
 except Exception as e:
     print(f"[❌] Unhandled error occurred: {e}", file=sys.stderr)
     traceback.print_exc(file=sys.stderr)
+    raise
 finally:
     print("[🟢] bot_setup.py finished. Chrome driver is ready for further automation.")
