@@ -11,5 +11,5 @@ done
 
 echo "[wait_for_vnc] ✅ VNC server detected. Launching noVNC..."
 
-# Start noVNC proxy
-exec /opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 6080 --web /opt/noVNC
+# Start noVNC proxy and listen on all interfaces
+exec /opt/noVNC/utils/novnc_proxy --vnc localhost:5901 --listen 0.0.0.0:6080 --web /opt/noVNC
