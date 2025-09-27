@@ -1,19 +1,24 @@
 """
 Telegram integration: Listener and signal parser.
 Includes runtime logging for connection, messages, and errors.
+Credentials are fully hardcoded for private project.
 """
 
 from telethon import TelegramClient, events
-import os
 import re
 from datetime import datetime, timedelta
 
-# Load credentials from environment
-api_id = int(os.getenv("TELEGRAM_API_ID"))
-api_hash = os.getenv("TELEGRAM_API_HASH")
-bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-channel_env = os.getenv("TELEGRAM_CHANNEL")  # Can be numeric ID (-100...) or username (@channelname)
+# =========================
+# HARD-CODED CREDENTIALS
+# =========================
+api_id = 29630724
+api_hash = "8e12421a95fd722246e0c0b194fd3e0c"
+bot_token = "8477806088:AAGEXpIAwN5tNQM0hsCGqP-otpLJjPJLmWA"
+channel_env = "-1003033183667"  # Numeric ID or @channelname
 
+# =========================
+# Telegram Client Setup
+# =========================
 client = TelegramClient('bot_session', api_id, api_hash)
 
 # Resolve channel once at startup
@@ -31,6 +36,9 @@ async def resolve_channel():
         print(f"[❌] Failed to resolve Telegram channel '{channel_env}': {e}")
         raise
 
+# =========================
+# Telegram Listener
+# =========================
 def start_telegram_listener(signal_callback, command_callback):
     print("[🔌] Starting Telegram listener...")
 
@@ -63,7 +71,9 @@ def start_telegram_listener(signal_callback, command_callback):
     except Exception as e:
         print(f"[❌] Telegram listener failed: {e}")
 
-
+# =========================
+# Signal Parser
+# =========================
 def parse_signal(message_text):
     """
     Parses trading signals from a Telegram message text.
@@ -119,4 +129,4 @@ def parse_signal(message_text):
         print(f"[🔁] Default Anna martingale times applied: {result['martingale_times']}")
 
     return result
-        
+    
