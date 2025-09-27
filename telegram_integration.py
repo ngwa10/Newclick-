@@ -129,4 +129,4 @@ def parse_signal(message_text):
         print(f"[🔁] Default Anna martingale times applied: {result['martingale_times']}")
 
     return result
-    
+        
