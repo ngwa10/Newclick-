@@ -57,6 +57,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && apt-get clean && rm -rf /var/lib/apt/lists/* \
  && rm -rf /tmp/* /var/tmp/*
 
+RUN pip install numpy
+
 # Clone noVNC and websockify - keep git as noVNC needs it for websockify
 RUN git clone --depth 1 https://github.com/novnc/noVNC.git /opt/noVNC \
  && git clone --depth 1 https://github.com/novnc/websockify.git /opt/noVNC/utils/websockify
