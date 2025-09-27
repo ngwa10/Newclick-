@@ -24,6 +24,7 @@ TELEGRAM_BOT_TOKEN = "8477806088:AAGEXpIAwN5tNQM0hsCGqP-otpLJjPJLmWA"
 TELEGRAM_CHANNEL = "-1003033183667"
 WEB_PORT = 8080
 NOVNC_PORT = 6080
+HEALTH_PORT = 6081  # Changed to avoid conflict with NOVNC
 POST_LOGIN_WAIT = 180
 
 # =========================
@@ -52,7 +53,7 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
         elif self.path == '/vnc.html':
             self.send_response(302)
-            self.send_header('Location', '/vnc_lite.html')
+            self.send_header('Location', '/vnc.html')  # Redirect fixed
             self.end_headers()
         else:
             self.send_response(404)
@@ -62,8 +63,8 @@ class HealthHandler(BaseHTTPRequestHandler):
 
 def start_health_server():
     try:
-        logger.info(f"Starting health server on port {NOVNC_PORT}")
-        server = HTTPServer(('0.0.0.0', NOVNC_PORT), HealthHandler)
+        logger.info(f"Starting health server on port {HEALTH_PORT}")
+        server = HTTPServer(('0.0.0.0', HEALTH_PORT), HealthHandler)
         server.serve_forever()
     except Exception as e:
         logger.error(f"Health server failed to start: {e}")
@@ -145,7 +146,6 @@ class TradeManager:
     def handle_signal(self, signal: Dict[str, Any]):
         if not self.trading_active:
             return
-        # Convert OTC-4 signals to OTC-3 if needed
         entry_time = signal.get("entry_time")
         if signal.get("timezone", "OTC-3") == "OTC-4":
             fmt = "%H:%M:%S" if len(entry_time.split(":")) == 3 else "%H:%M"
@@ -154,11 +154,9 @@ class TradeManager:
             entry_time = dt.strftime(fmt)
             signal['entry_time'] = entry_time
 
-        # Schedule main trade
         if entry_time:
             self.schedule_trade(entry_time, signal.get("direction", "BUY"), self.base_amount, 0)
 
-        # Schedule martingale trades
         for i, mg_time in enumerate(signal.get("martingale_times", []) or []):
             if i + 1 > self.max_martingale:
                 break
@@ -182,7 +180,6 @@ class TradeManager:
         if pyautogui is None:
             return
         try:
-            # Hotkeys: shift+w/buy, shift+s/sell, shift+d/increase, shift+a/decrease
             if direction.upper() == "BUY":
                 pyautogui.keyDown('shift')
                 pyautogui.press('w')
@@ -222,4 +219,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-            
