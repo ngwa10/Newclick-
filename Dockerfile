@@ -26,6 +26,7 @@ FROM python:3.12-slim
 # Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV DISPLAY=:1
+ENV PORT=6080
 ENV CHROME_ARGS="--no-sandbox --disable-dev-shm-usage --disable-gpu --headless --memory-pressure-off --max_old_space_size=2048 --disable-background-timer-throttling --disable-renderer-backgrounding"
 
 # Install runtime dependencies - optimized for smaller size and better performance
@@ -52,6 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon0 \
     xdg-utils \
     curl \
+    netcat-openbsd \
  && apt-get clean && rm -rf /var/lib/apt/lists/* \
  && rm -rf /tmp/* /var/tmp/*
 
@@ -67,17 +69,17 @@ COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application files
-COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py wait-for-xvfb.sh /app/
+COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py wait-for-xvfb.sh health-check.sh /app/
 
 # Fix permissions and make scripts executable
-RUN chmod +x /app/run_bot.sh /app/wait-for-xvfb.sh
+RUN chmod +x /app/run_bot.sh /app/wait-for-xvfb.sh /app/health-check.sh
 
 # Expose the port for noVNC (this should match your Zeabur port setting)
 EXPOSE 6080
 
-# Improved health check - test the actual service endpoint
-HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
-    CMD curl -f http://localhost:6080/health || curl -f http://localhost:6080/ || exit 1
+# Robust health check that waits for all services
+HEALTHCHECK --interval=30s --timeout=15s --start-period=120s --retries=5 \
+    CMD /app/health-check.sh
 
 # Start supervisord in foreground
 CMD ["supervisord", "-n", "-c", "/app/supervisord.conf"]
