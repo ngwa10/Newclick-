@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Copy only requirements first to leverage Docker cache
+# Copy only requirements first to leverage Docker cache.
 COPY requirements.txt /app/
 
 # Install Python dependencies
