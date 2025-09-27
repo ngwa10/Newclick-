@@ -1,13 +1,13 @@
 # 🐍 Base image
 FROM python:3.11-slim
 
-# 🛠️ Set noninteractive mode to avoid debconf errors
+# 🛠️ Avoid interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 🚫 Prevent services from starting during build
+# 🚫 Prevent services from auto-starting during build
 RUN printf '#!/bin/sh\nexit 0' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d
 
-# 📦 Install system dependencies (xdpyinfo removed)
+# 📦 Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget gnupg unzip curl x11vnc xvfb net-tools git python3-pip \
     supervisor fonts-liberation libappindicator3-1 \
@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 🌐 Install Google Chrome
 RUN curl -SL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o chrome.deb \
-    && apt-get update && apt-get install -y ./chrome.deb \
+    && apt-get install -y ./chrome.deb \
     && rm chrome.deb
 
 # 🧭 Install ChromeDriver
@@ -37,10 +37,11 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
 
 # 📁 Set working directory and copy app files
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY run_bot.sh core.py supervisord.conf /app/
+COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py /app/
 RUN chmod +x /app/run_bot.sh
 
 # 🌐 Expose VNC and noVNC ports
