@@ -37,6 +37,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# Create a non-root user with UID 1000
+RUN useradd -m -u 1000 appuser
+
 # Set working directory
 WORKDIR /app
 
@@ -46,7 +49,9 @@ COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py /app/
 # Fix permissions for the script
 USER root
 RUN chmod +x /app/run_bot.sh
-USER 1000  # switch back to non-root user
+
+# ✅ Now we can safely switch to UID 1000
+USER appuser
 
 # Copy and install Python dependencies
 COPY requirements.txt /app/
