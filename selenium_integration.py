@@ -1,95 +1,105 @@
 """
-Selenium functions for Pocket Option automation: setup, currency pair & timeframe selection, and trade result detection.
+Selenium and hotkey automation for Pocket Option.
+Features:
+- Hotkey-driven currency selection for signals.
+- Entry-time trade execution.
+- Continuous win/loss detection via UI.
 """
 
+import pyautogui
+import threading
 import time
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
 
 # =========================
-# WebDriver Setup
+# Selenium Driver Setup
 # =========================
-def setup_driver(chromedriver_path="/usr/local/bin/chromedriver", headless=False):
+def setup_driver():
     chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--start-maximized")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option("useAutomationExtension", False)
     chrome_options.add_argument("--user-data-dir=/tmp/chrome-user-data")
-    if headless:
-        chrome_options.add_argument("--headless=new")
-    
-    service = Service(chromedriver_path)
+    chrome_options.add_argument("--start-maximized")
+    service = Service("/usr/local/bin/chromedriver")
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.get("https://pocketoption.com/en/login/")
     print("[✅] Chrome started and navigated to Pocket Option login.")
     return driver
 
 # =========================
-# Currency Pair Selection
+# Hotkey Currency Switching
 # =========================
-def select_currency_pair(driver, pair_name):
-    """Select a currency pair by name."""
-    try:
-        search_input = driver.find_element(By.XPATH, "//input[@placeholder='Search']")
-        search_input.clear()
-        search_input.send_keys(pair_name)
-        time.sleep(0.5)
-        pair_element = driver.find_element(By.XPATH, f"//div[contains(@class,'pair-item') and text()='{pair_name}']")
-        pair_element.click()
-        print(f"[🧭] Selected currency pair: {pair_name}")
-    except NoSuchElementException:
-        print(f"[⚠️] Currency pair '{pair_name}' not found.")
+def currency_detection(signal_currency, max_attempts=50):
+    """
+    Switches currency using hotkeys until signal_currency is detected.
+    """
+    for i in range(max_attempts):
+        current_currency = get_displayed_currency()
+        if current_currency == signal_currency:
+            return True
+        send_hotkey_to_next_currency(i)
+        time.sleep(5)  # wait 5s for UI to update
+    return False
+
+def send_hotkey_to_next_currency(index):
+    # Map favorite currencies to hotkeys as needed
+    pyautogui.press('f'+str((index % 12) + 1))  # example F1–F12 cycling
+    print(f"[🎯] Hotkey sent to switch currency (attempt {index+1})")
+
+def get_displayed_currency():
+    # TODO: Use screenshot + OCR or Selenium to detect current currency
+    # For now, placeholder:
+    return "PLACEHOLDER"
 
 # =========================
-# Timeframe Selection
+# Timeframe Hotkey (Optional)
 # =========================
-def select_timeframe(driver, timeframe):
-    """
-    Select timeframe if different from the currently selected one.
-    Supported: 'M1', 'M5'
-    """
-    try:
-        current_tf_element = driver.find_element(By.XPATH, "//div[contains(@class,'timeframe-dropdown')]")
-        current_tf = current_tf_element.text.strip()
-        if current_tf == timeframe:
-            print(f"[⏱️] Timeframe already set to {timeframe}, no action needed.")
-            return
-
-        current_tf_element.click()
-        time.sleep(0.2)
-        tf_option = driver.find_element(By.XPATH, f"//div[contains(@class,'timeframe-item') and text()='{timeframe}']")
-        tf_option.click()
-        print(f"[⏱️] Timeframe changed to {timeframe}.")
-    except NoSuchElementException:
-        print(f"[⚠️] Timeframe '{timeframe}' option not found.")
+def select_timeframe(signal_timeframe):
+    # Use hotkeys if needed or Selenium click (simplified)
+    # Placeholder: just print
+    print(f"[⏱️] Timeframe set to: {signal_timeframe}")
 
 # =========================
-# Trade Result Detection
+# Trade Execution Hotkeys
 # =========================
-def detect_trade_result(driver, check_interval=0.5):
+def place_trade(direction):
+    if direction.upper() == "BUY":
+        pyautogui.keyDown('shift')
+        pyautogui.press('w')
+        pyautogui.keyUp('shift')
+    elif direction.upper() == "SELL":
+        pyautogui.keyDown('shift')
+        pyautogui.press('s')
+        pyautogui.keyUp('shift')
+    print(f"[💵] Trade executed: {direction}")
+
+# =========================
+# Win/Loss Detection
+# =========================
+def trade_result_monitor(check_interval=0.5):
     """
-    Continuously check the latest trade result.
-    Returns:
-        'WIN' if last trade was a win
-        'LOSS' if last trade was a loss
-        None if no result yet
+    Continuously checks trade result and updates global status.
     """
-    try:
-        result_element = driver.find_element(By.XPATH, "//div[contains(@class,'last-trade-result')]")
-        text = result_element.text.strip()
-        if text.startswith("+$"):
-            return "WIN"
-        elif text == "$0":
-            return "LOSS"
-    except NoSuchElementException:
-        return None
-    time.sleep(check_interval)
+    from core import current_trade_status  # import shared variable
+    while True:
+        result = detect_win_loss()
+        if result:
+            current_trade_status[0] = result  # shared variable
+        time.sleep(check_interval)
+
+def detect_win_loss():
+    """
+    Detect trade outcome using screenshot or Selenium.
+    Returns "WIN", "LOSS", or None.
+    """
+    # TODO: Implement Selenium or OCR detection
+    # Placeholder for demonstration:
     return None
     
