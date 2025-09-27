@@ -57,9 +57,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Clone noVNC into /opt/noVNC
-RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC && \
-    apt-get remove -y git && apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Clone noVNC into /opt/noVNC (keep git installed)
+RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC
 
 # Create a non-root user
 RUN useradd -m -u 1000 appuser
