@@ -51,6 +51,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxdamage1 \
     libxkbcommon0 \
     xdg-utils \
+    curl \
  && apt-get clean && rm -rf /var/lib/apt/lists/* \
  && rm -rf /tmp/* /var/tmp/*
 
@@ -74,9 +75,9 @@ RUN chmod +x /app/run_bot.sh /app/wait-for-xvfb.sh
 # Expose the port for noVNC (this should match your Zeabur port setting)
 EXPOSE 6080
 
-# Health check to ensure container is responding
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:6080/vnc.html || exit 1
+# Improved health check - test the actual service endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
+    CMD curl -f http://localhost:6080/health || curl -f http://localhost:6080/ || exit 1
 
 # Start supervisord in foreground
 CMD ["supervisord", "-n", "-c", "/app/supervisord.conf"]
