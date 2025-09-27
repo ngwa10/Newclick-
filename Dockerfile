@@ -1,57 +1,53 @@
-# -----------------------
-# Dockerfile
-# -----------------------
-FROM python:3.11-slim
+# Base image
+FROM python:3.12-slim
 
-# Avoid interactive prompts
-ENV DEBIAN_FRONTEND=noninteractive
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV DISPLAY=:1
 
-# Prevent services from auto-starting during build
-RUN printf '#!/bin/sh\nexit 0' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d
-
-# Install system dependencies
+# Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget gnupg unzip curl x11vnc xvfb net-tools git python3-pip supervisor fonts-liberation libappindicator3-1 \
-    libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 libgdk-pixbuf-2.0-0 \
-    libnspr4 libnss3 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgl1 libxrender1 libxext6 \
-    libxkbcommon0 xdg-utils \
+    wget \
+    curl \
+    git \
+    unzip \
+    xvfb \
+    x11-utils \
+    python3-dev \
+    build-essential \
+    libx11-dev \
+    libxtst-dev \
+    libpng-dev \
+    libgl1-mesa-glx \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Google Chrome
-RUN curl -SL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o chrome.deb \
-    && apt-get install -y ./chrome.deb \
-    && rm chrome.deb
+# Install Chrome and chromedriver
+RUN wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    && apt-get install -y /tmp/chrome.deb \
+    && rm /tmp/chrome.deb
 
-# Install ChromeDriver (latest)
-RUN DRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE") \
-    && wget -q "https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver_linux64.zip" -O /tmp/chromedriver.zip \
+RUN wget -q -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/118.0.5993.90/chromedriver_linux64.zip \
     && unzip /tmp/chromedriver.zip -d /usr/local/bin/ \
-    && chmod +x /usr/local/bin/chromedriver \
-    && rm -rf /tmp/*
+    && rm /tmp/chromedriver.zip \
+    && chmod +x /usr/local/bin/chromedriver
 
-# Install noVNC
-RUN git clone --depth 1 https://github.com/novnc/noVNC.git /opt/noVNC \
-    && git clone --depth 1 https://github.com/novnc/websockify /opt/noVNC/utils/websockify \
-    && ln -s /opt/noVNC /usr/share/novnc \
-    && chmod +x /opt/noVNC/utils/novnc_proxy
-
-# Create non-root user
-RUN useradd -ms /bin/bash botuser
-USER botuser
-
-# Set working directory
+# Create app directory
 WORKDIR /app
 
-# Copy requirements and install
-COPY requirements.txt .
+# Copy files
+COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py /app/
+
+# Fix permissions using root
+USER root
+RUN chmod +x /app/run_bot.sh
+USER 1000  # Switch back to non-root user (adjust if needed)
+
+# Install Python dependencies
+COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app files
-COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py /app/
-RUN chmod +x /app/run_bot.sh
+# Expose ports if needed (optional)
+# EXPOSE 8080
 
-# Expose VNC and noVNC ports
-EXPOSE 5900 6080
-
-# Start supervisor
-CMD ["/usr/bin/supervisord", "-c", "/app/supervisord.conf"]
+# Default entry
+CMD ["bash", "/app/run_bot.sh"]
