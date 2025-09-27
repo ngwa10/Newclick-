@@ -59,4 +59,4 @@ requirements.txt         # Dependencies
 
 ## License
 
-MIT
+MIT.
