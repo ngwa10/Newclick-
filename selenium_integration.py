@@ -1,105 +1,72 @@
 """
-Selenium and hotkey automation for Pocket Option.
-Features:
-- Hotkey-driven currency selection for signals.
-- Entry-time trade execution.
-- Continuous win/loss detection via UI.
+Selenium utilities for Pocket Option:
+- Detects trade results (win/loss) continuously.
+- Can be integrated with core to stop martingale on win.
 """
 
-import pyautogui
-import threading
 import time
-from datetime import datetime
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 
-# =========================
-# Selenium Driver Setup
-# =========================
-def setup_driver():
+CHECK_INTERVAL = 0.5  # check every 0.5 seconds
+
+def setup_driver(headless=False):
     chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--start-maximized")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option("useAutomationExtension", False)
+    chrome_options.add_experimental_option('useAutomationExtension', False)
     chrome_options.add_argument("--user-data-dir=/tmp/chrome-user-data")
-    chrome_options.add_argument("--start-maximized")
+    if headless:
+        chrome_options.add_argument("--headless=new")
+    
     service = Service("/usr/local/bin/chromedriver")
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.get("https://pocketoption.com/en/login/")
     print("[✅] Chrome started and navigated to Pocket Option login.")
     return driver
 
-# =========================
-# Hotkey Currency Switching
-# =========================
-def currency_detection(signal_currency, max_attempts=50):
+def detect_trade_result(driver):
     """
-    Switches currency using hotkeys until signal_currency is detected.
+    Continuously checks for the last trade result:
+    - Win: text starts with '+' and has a green checkmark
+    - Loss: text is exactly '$0' with a red cross
+    Returns: "WIN", "LOSS", or None if no result yet
     """
-    for i in range(max_attempts):
-        current_currency = get_displayed_currency()
-        if current_currency == signal_currency:
-            return True
-        send_hotkey_to_next_currency(i)
-        time.sleep(5)  # wait 5s for UI to update
-    return False
+    try:
+        while True:
+            # Adjust selectors based on Pocket Option UI
+            # Example placeholders
+            result_elements = driver.find_elements(By.CSS_SELECTOR, ".trade-history .trade-result")
+            for elem in result_elements:
+                text = elem.text.strip()
+                # Win condition
+                if text.startswith("+"):
+                    return "WIN"
+                # Loss condition
+                elif text == "$0":
+                    return "LOSS"
+            time.sleep(CHECK_INTERVAL)
+    except Exception as e:
+        print(f"[❌] Error detecting trade result: {e}")
+        return None
 
-def send_hotkey_to_next_currency(index):
-    # Map favorite currencies to hotkeys as needed
-    pyautogui.press('f'+str((index % 12) + 1))  # example F1–F12 cycling
-    print(f"[🎯] Hotkey sent to switch currency (attempt {index+1})")
-
-def get_displayed_currency():
-    # TODO: Use screenshot + OCR or Selenium to detect current currency
-    # For now, placeholder:
-    return "PLACEHOLDER"
-
-# =========================
-# Timeframe Hotkey (Optional)
-# =========================
-def select_timeframe(signal_timeframe):
-    # Use hotkeys if needed or Selenium click (simplified)
-    # Placeholder: just print
-    print(f"[⏱️] Timeframe set to: {signal_timeframe}")
-
-# =========================
-# Trade Execution Hotkeys
-# =========================
-def place_trade(direction):
-    if direction.upper() == "BUY":
-        pyautogui.keyDown('shift')
-        pyautogui.press('w')
-        pyautogui.keyUp('shift')
-    elif direction.upper() == "SELL":
-        pyautogui.keyDown('shift')
-        pyautogui.press('s')
-        pyautogui.keyUp('shift')
-    print(f"[💵] Trade executed: {direction}")
-
-# =========================
-# Win/Loss Detection
-# =========================
-def trade_result_monitor(check_interval=0.5):
+def start_result_monitor(driver, callback):
     """
-    Continuously checks trade result and updates global status.
+    Starts a background thread to monitor trade results.
+    Calls `callback(result)` when a WIN or LOSS is detected.
     """
-    from core import current_trade_status  # import shared variable
-    while True:
-        result = detect_win_loss()
-        if result:
-            current_trade_status[0] = result  # shared variable
-        time.sleep(check_interval)
-
-def detect_win_loss():
-    """
-    Detect trade outcome using screenshot or Selenium.
-    Returns "WIN", "LOSS", or None.
-    """
-    # TODO: Implement Selenium or OCR detection
-    # Placeholder for demonstration:
-    return None
-    
+    import threading
+    def monitor():
+        while True:
+            result = detect_trade_result(driver)
+            if result:
+                callback(result)
+            time.sleep(CHECK_INTERVAL)
+    threading.Thread(target=monitor, daemon=True).start()
+            
