@@ -12,7 +12,7 @@ Automates Pocket Option trades using signals from a Telegram channel. Features m
 - Fast win/loss detection via OCR
 - Highly modular, production-ready code
 
-## Architecture
+## Architecture.
 
 ```
 core.py                  # Main orchestrator, trade manager, hotkey controller
