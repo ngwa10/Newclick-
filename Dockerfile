@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
     libdbus-1-3 libgdk-pixbuf-2.0-0 libnspr4 libnss3 \
     libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
-    libgl1 libxrender1 libxext6 libxkbcommon0 xdg-utils \
+    libgl1 libxrender1 libxext6 libxkbcommon0 xdg-utils xdpyinfo \
     && rm -rf /var/lib/apt/lists/*
 
 # 🌐 Install Google Chrome
@@ -35,17 +35,13 @@ RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC \
     && ln -s /opt/noVNC /usr/share/novnc \
     && chmod +x /opt/noVNC/utils/novnc_proxy
 
-# 📁 Copy app files
+# 📁 Set working directory and copy app files
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ✅ Ensure bot script is present and executable
-COPY run_bot.sh /app/
+COPY run_bot.sh core.py supervisord.conf /app/
 RUN chmod +x /app/run_bot.sh
-
-# ✅ Copy supervisor config
-COPY supervisord.conf /app/
 
 # 🌐 Expose VNC and noVNC ports
 EXPOSE 5900 6080
