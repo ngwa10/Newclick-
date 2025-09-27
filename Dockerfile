@@ -5,7 +5,7 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
 ENV DISPLAY=:1
 
-# Install dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
@@ -18,14 +18,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-dev \
     libxtst-dev \
     libpng-dev \
-    libgl1-mesa-glx \
+    libgl1 \
+    libgl1-mesa-dri \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome and chromedriver
+# Install Chrome
 RUN wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && apt-get install -y /tmp/chrome.deb \
     && rm /tmp/chrome.deb
 
+# Install ChromeDriver
 RUN wget -q -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/118.0.5993.90/chromedriver_linux64.zip \
     && unzip /tmp/chromedriver.zip -d /usr/local/bin/ \
     && rm /tmp/chromedriver.zip \
@@ -34,20 +36,20 @@ RUN wget -q -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com
 # Create app directory
 WORKDIR /app
 
-# Copy files
+# Copy application files
 COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py /app/
 
-# Fix permissions using root
+# Fix permissions for the script
 USER root
 RUN chmod +x /app/run_bot.sh
 USER 1000  # Switch back to non-root user (adjust if needed)
 
-# Install Python dependencies
+# Copy and install Python dependencies
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose ports if needed (optional)
+# Optional: Expose ports if needed
 # EXPOSE 8080
 
-# Default entry
+# Start script
 CMD ["bash", "/app/run_bot.sh"]
