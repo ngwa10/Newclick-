@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # -----------------------
 # run_bot.sh
 # -----------------------
@@ -28,4 +29,7 @@ echo "[🚀] Starting core.py bot..."
 
 # Run the main bot script
 # Use python3 explicitly to avoid conflicts with python2
-python3 core.py
+python3 core.py T
+
+# If the bot script exits, keep container alive for debugging
+tail -f /dev/null
