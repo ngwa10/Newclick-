@@ -70,11 +70,11 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application files
-COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py /app/
+# Copy application files including wait-for-xvfb.sh
+COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py wait-for-xvfb.sh /app/
 
-# Fix permissions
-RUN chmod +x /app/run_bot.sh && chown -R appuser:appuser /app
+# Fix permissions, make scripts executable, and set ownership
+RUN chmod +x /app/run_bot.sh /app/wait-for-xvfb.sh && chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
