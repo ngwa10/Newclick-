@@ -19,6 +19,7 @@ COPY requirements.txt /app/
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+
 # ---------- Stage 2: Final runtime image ----------
 FROM python:3.12-slim
 
@@ -26,7 +27,7 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
 ENV DISPLAY=:1
 
-# Install runtime dependencies including Tesseract OCR
+# Install runtime dependencies including Tesseract OCR and supervisord
 RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     chromium \
@@ -73,5 +74,5 @@ RUN chmod +x /app/run_bot.sh && chown -R appuser:appuser /app
 # Switch to non-root user
 USER appuser
 
-# Start everything using supervisord
-CMD ["supervisord", "-c", "/app/supervisord.conf"]
+# Start supervisord in foreground with debug logging for better troubleshooting
+CMD ["supervisord", "-n", "-c", "/app/supervisord.conf", "-d", "10"]
