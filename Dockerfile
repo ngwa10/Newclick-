@@ -54,9 +54,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && apt-get clean && rm -rf /var/lib/apt/lists/* \
  && rm -rf /tmp/* /var/tmp/*
 
-# Clone noVNC into /opt/noVNC and clean up git after
+# Clone noVNC and websockify - keep git as noVNC needs it for websockify
 RUN git clone --depth 1 https://github.com/novnc/noVNC.git /opt/noVNC \
- && apt-get remove -y git && apt-get autoremove -y
+ && git clone --depth 1 https://github.com/novnc/websockify.git /opt/noVNC/utils/websockify
 
 # Set working directory
 WORKDIR /app
