@@ -8,12 +8,15 @@ import os
 import sys
 import time
 import traceback
+from datetime import datetime, timezone
 from dotenv import load_dotenv
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 # Optional GUI automation / OCR libraries
 try:
     import pyautogui
+    pyautogui.FAILSAFE = True
+    pyautogui.PAUSE = 0.1
 except Exception:
     pyautogui = None
 
@@ -26,7 +29,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import WebDriverException, NoSuchElementException
+from selenium.common.exceptions import WebDriverException
 
 # Configure line buffering
 try:
@@ -45,6 +48,17 @@ if os.path.exists(ENV_PATH):
 else:
     print(f"[⚠️] .env file not found at {ENV_PATH} — falling back to environment variables", file=sys.stderr)
 
+# Pocket Option credentials
+EMAIL = os.getenv("POCKET_EMAIL")
+PASSWORD = os.getenv("POCKET_PASS")
+try:
+    POST_LOGIN_WAIT = int(os.getenv("POST_LOGIN_WAIT", "180"))
+except ValueError:
+    POST_LOGIN_WAIT = 180
+
+if not EMAIL or not PASSWORD:
+    print("[⚠️] Pocket Option credentials not set in environment variables.", file=sys.stderr)
+
 # Telegram environment variables
 TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID")
 TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH")
@@ -52,9 +66,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL = os.getenv("TELEGRAM_CHANNEL")
 
 if not all([TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL]):
-    raise ValueError("[❌] Missing Telegram environment variables. Check .env file or environment.")
-
-print("[🔑] Telegram configuration loaded.")
+    print("[⚠️] Missing Telegram environment variables. Telegram listener may not start.", file=sys.stderr)
 
 # Local import for Telegram integration
 try:
@@ -71,27 +83,11 @@ if not os.path.exists('/tmp/.Xauthority'):
     open('/tmp/.Xauthority', 'a').close()
     print("[⚠️] Created empty /tmp/.Xauthority. Ensure Xvfb is running if GUI is required.")
 
-# Pocket Option credentials
-EMAIL = os.getenv("POCKET_EMAIL")
-PASSWORD = os.getenv("POCKET_PASS")
-try:
-    POST_LOGIN_WAIT = int(os.getenv("POST_LOGIN_WAIT", "180"))
-except ValueError:
-    POST_LOGIN_WAIT = 180
-
-if not EMAIL or not PASSWORD:
-    print("[⚠️] Pocket Option credentials not set in environment variables.", file=sys.stderr)
-
 # -------------------------------------------------------
 # Setup Chrome WebDriver
 # -------------------------------------------------------
 def setup_driver(chromedriver_path: str = "/usr/local/bin/chromedriver", headless: bool = False,
                  user_data_dir: str = "/tmp/chrome-user-data") -> Optional[webdriver.Chrome]:
-    """
-    Launch Chrome WebDriver and navigate to Pocket Option login page.
-    Returns the Selenium WebDriver instance or None if failed.
-    """
-    time.sleep(2)  # ensure Xvfb/VNC is ready
     chrome_options = Options()
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -104,30 +100,30 @@ def setup_driver(chromedriver_path: str = "/usr/local/bin/chromedriver", headles
         chrome_options.add_argument("--headless=new")
 
     service = Service(chromedriver_path)
-    try:
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.get("https://pocketoption.com/en/login/")
-        print("[✅] Chrome started and navigated to login page.")
-    except WebDriverException as e:
-        print(f"[❌] WebDriver error when starting Chrome: {e}", file=sys.stderr)
-        traceback.print_exc()
-        return None
-
-    # Autofill credentials if available
-    if EMAIL and PASSWORD:
+    
+    for attempt in range(3):
         try:
-            time.sleep(2)
-            email_input = driver.find_element(By.NAME, "email")
-            password_input = driver.find_element(By.NAME, "password")
-            email_input.clear()
-            email_input.send_keys(EMAIL)
-            password_input.clear()
-            password_input.send_keys(PASSWORD)
-            print("[✅] Credentials filled. Complete CAPTCHA manually if required.")
-            print(f"[🚨] Waiting {POST_LOGIN_WAIT} seconds for manual login...")
-        except Exception as e:
-            print(f"[⚠️] Could not fill credentials: {e}", file=sys.stderr)
-    return driver
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            driver.get("https://pocketoption.com/en/login/")
+            print("[✅] Chrome started and navigated to login page.")
+            if EMAIL and PASSWORD:
+                try:
+                    time.sleep(2)
+                    email_input = driver.find_element(By.NAME, "email")
+                    password_input = driver.find_element(By.NAME, "password")
+                    email_input.clear()
+                    email_input.send_keys(EMAIL)
+                    password_input.clear()
+                    password_input.send_keys(PASSWORD)
+                    print(f"[🚨] Waiting {POST_LOGIN_WAIT} seconds for manual login / CAPTCHA")
+                    time.sleep(POST_LOGIN_WAIT)
+                except Exception as e:
+                    print(f"[⚠️] Could not autofill credentials: {e}", file=sys.stderr)
+            return driver
+        except WebDriverException as e:
+            print(f"[❌] WebDriver attempt {attempt+1} failed: {e}", file=sys.stderr)
+            time.sleep(3)
+    return None
 
 # -------------------------------------------------------
 # Trade Manager
@@ -135,40 +131,41 @@ def setup_driver(chromedriver_path: str = "/usr/local/bin/chromedriver", headles
 class TradeManager:
     def __init__(self, driver: Optional[webdriver.Chrome] = None, base_amount: float = 1.0, max_martingale: int = 2):
         self.trading_active = False
-        self.martingale_level = 0
+        self.driver = driver
         self.base_amount = base_amount
         self.max_martingale = max_martingale
-        self.driver = driver
+
+    # Helper to wait until a specific entry time
+    def wait_until(self, entry_time_str: str):
+        try:
+            entry_time = datetime.fromisoformat(entry_time_str).replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            delay = (entry_time - now).total_seconds()
+            if delay > 0:
+                print(f"[⏰] Waiting {delay:.2f} seconds until trade entry time")
+                time.sleep(delay)
+        except Exception as e:
+            print(f"[⚠️] Invalid entry_time format '{entry_time_str}': {e}", file=sys.stderr)
 
     def handle_signal(self, signal: Dict[str, Any]):
         if not self.trading_active:
             print("[⏸️] Trading paused. Signal ignored.")
             return
 
-        try:
-            from selenium_integration import select_currency_pair, select_timeframe  # type: ignore
-        except Exception:
-            select_currency_pair = None
-            select_timeframe = None
-            print("[⚠️] selenium_integration module not available.", file=sys.stderr)
+        # Schedule direct trade at entry_time
+        entry_time = signal.get("entry_time")
+        if entry_time:
+            self.schedule_trade(entry_time, signal.get("direction", "BUY"), self.base_amount, 0)
+        else:
+            print("[⚠️] Signal missing entry_time, skipping direct trade")
 
-        if select_currency_pair and select_timeframe and self.driver:
-            try:
-                select_currency_pair(self.driver, signal.get('currency_pair'))
-                select_timeframe(self.driver, signal.get('timeframe'))
-            except Exception as e:
-                print(f"[❌] Error selecting pair/timeframe: {e}", file=sys.stderr)
-                traceback.print_exc()
-
-        print(f"[⚡] Ready for trade: {signal}")
-
-        self.schedule_trade(signal.get('entry_time'), signal.get('direction'), self.base_amount, 0)
-        for i, mg_time in enumerate(signal.get('martingale_times', []) or []):
+        # Schedule martingale trades
+        for i, mg_time in enumerate(signal.get("martingale_times", []) or []):
             if i + 1 > self.max_martingale:
                 print(f"[⚠️] Martingale level {i+1} exceeds max {self.max_martingale}; skipping.")
                 break
-            amount = self.base_amount * (2 ** (i + 1))
-            self.schedule_trade(mg_time, signal.get('direction'), amount, i + 1)
+            mg_amount = self.base_amount * (2 ** (i + 1))
+            self.schedule_trade(mg_time, signal.get("direction", "BUY"), mg_amount, i + 1)
 
     def handle_command(self, command: str):
         cmd = command.strip().lower()
@@ -181,19 +178,14 @@ class TradeManager:
         else:
             print(f"[ℹ️] Unknown command: {command}")
 
-    def schedule_trade(self, entry_time: Optional[str], direction: str, amount: float, martingale_level: int):
-        print(f"[⏰] Scheduling trade at {entry_time} | {direction} | amount: {amount} | level: {martingale_level}")
-        if not entry_time:
-            try:
-                self.place_trade(amount, direction)
-            except Exception as e:
-                print(f"[❌] Failed to place immediate trade: {e}", file=sys.stderr)
-                traceback.print_exc()
-        else:
-            print("[⚠️] entry_time provided but scheduling not implemented.")
+    # Schedule trade to run at exact entry time
+    def schedule_trade(self, entry_time: str, direction: str, amount: float, martingale_level: int):
+        print(f"[⚡] Scheduling trade at {entry_time} | {direction} | amount: {amount} | level: {martingale_level}")
+        self.wait_until(entry_time)
+        self.place_trade(amount, direction)
 
     def place_trade(self, amount: float, direction: str = "BUY"):
-        print(f"[🎯] Attempting trade: {direction} | amount: {amount}")
+        print(f"[🎯] Placing trade: {direction} | amount: {amount}")
         if pyautogui is None:
             print("[⚠️] pyautogui not available; implement Selenium click fallback.", file=sys.stderr)
             return
@@ -231,18 +223,5 @@ def main():
     print("[🟢] Bot started! Waiting for signals...")
     try:
         while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("[🛑] Bot stopped by user.")
-    finally:
-        if driver:
-            try:
-                print("[🧹] Quitting Chrome browser.")
-                driver.quit()
-            except Exception as e:
-                print(f"[⚠️] Error quitting driver: {e}", file=sys.stderr)
-        print("[🛑] core.py finished.")
-
-
-if __name__ == "__main__":
-    main()
+            time.sleep(1
+    
