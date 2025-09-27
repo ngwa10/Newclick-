@@ -1,27 +1,43 @@
-# Base image
-FROM python:3.12-slim
+# ---------- Stage 1: Build dependencies ----------
+FROM python:3.12-bookworm-slim AS builder
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Set workdir
+WORKDIR /app
+
+# Install build tools (temporary)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+# Copy only requirements first to leverage Docker cache
+COPY requirements.txt /app/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ---------- Stage 2: Final runtime image ----------
+FROM python:3.12-bookworm-slim
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV DISPLAY=:1
 
-# Install system dependencies, Chromium and Xvfb
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    supervisor \
     chromium \
     chromium-driver \
     xvfb \
     x11-utils \
-    python3-dev \
-    build-essential \
-    libx11-dev \
-    libxtst-dev \
-    libpng-dev \
+    libx11-6 \
+    libxtst6 \
+    libpng16-16 \
     libgl1 \
     libgl1-mesa-dri \
-    wget \
-    unzip \
-    git \
-    curl \
     fonts-liberation \
     libatspi2.0-0 \
     libcairo2 \
@@ -35,27 +51,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxdamage1 \
     libxkbcommon0 \
     xdg-utils \
-    && rm -rf /var/lib/apt/lists/*
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user with UID 1000
+# Create a non-root user
 RUN useradd -m -u 1000 appuser
 
 # Set working directory
 WORKDIR /app
 
-# Copy application files
+# Copy installed Python packages from builder stage
+COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy your application files
 COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py /app/
 
-# Fix permissions for the script
-USER root
-RUN chmod +x /app/run_bot.sh
+# Fix permissions
+RUN chmod +x /app/run_bot.sh && chown -R appuser:appuser /app
 
-# ✅ Now we can safely switch to UID 1000
+# Switch to non-root user
 USER appuser
 
-# Copy and install Python dependencies
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Default command to start bot
-CMD ["bash", "/app/run_bot.sh"]
+# Start everything via supervisord
+CMD ["supervisord", "-c", "/app/supervisord.conf"]
