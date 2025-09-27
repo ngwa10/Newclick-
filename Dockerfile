@@ -27,13 +27,15 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
 ENV DISPLAY=:1
 
-# Install runtime dependencies including Tesseract OCR and supervisord
+# Install runtime dependencies including Tesseract OCR, supervisord, x11vnc, git for noVNC cloning
 RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     chromium \
     chromium-driver \
     xvfb \
     x11-utils \
+    x11vnc \
+    git \
     tesseract-ocr \
     libx11-6 \
     libxtst6 \
@@ -54,6 +56,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon0 \
     xdg-utils \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Clone noVNC into /opt/noVNC
+RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC && \
+    apt-get remove -y git && apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
 RUN useradd -m -u 1000 appuser
