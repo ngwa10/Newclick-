@@ -26,13 +26,14 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
 ENV DISPLAY=:1
 
-# Install runtime dependencies
+# Install runtime dependencies including Tesseract OCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     chromium \
     chromium-driver \
     xvfb \
     x11-utils \
+    tesseract-ocr \
     libx11-6 \
     libxtst6 \
     libpng16-16 \
