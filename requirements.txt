@@ -1,8 +1,21 @@
-# EDIT
-
+# Telegram API client
 telethon
+
+# Browser automation
 selenium
+
+# Hotkey automation
 pyautogui
+python3-Xlib
+pyscreeze
+pygetwindow
+mouseinfo
+pytweening
+pymsgbox
+
+# OCR
 pytesseract
 pillow
+
+# Environment variables
 python-dotenv
