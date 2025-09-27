@@ -4,15 +4,12 @@
 # wait-for-xvfb.sh
 # -----------------------
 
-# Exit immediately if a command exits with a non-zero status
 set -e
-
-# Set display environment variable
 export DISPLAY=:1
+export XAUTHORITY=/tmp/.Xauthority
 
 echo "[🕒] Waiting for Xvfb to start on DISPLAY=$DISPLAY..."
 
-# Loop until Xvfb is ready
 MAX_RETRIES=60
 RETRY_INTERVAL=1
 COUNT=0
@@ -30,6 +27,6 @@ done
 
 echo "[✅] Xvfb is ready on DISPLAY=$DISPLAY!"
 
-# Launch your bot
-echo "[🚀] Starting bot..."
-exec python3 /app/core.py T
+# 🧠 IMPORTANT: Only run bot.py here (not core.py)
+echo "[🚀] Starting bot.py for WebDriver setup..."
+exec python3 /app/bot.py
