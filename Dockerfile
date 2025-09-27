@@ -74,5 +74,5 @@ RUN chmod +x /app/run_bot.sh && chown -R appuser:appuser /app
 # Switch to non-root user
 USER appuser
 
-# Start supervisord in foreground with debug logging for better troubleshooting
-CMD ["supervisord", "-n", "-c", "/app/supervisord.conf", "-d", "10"]
+# Start supervisord in foreground with correct arguments (no invalid -d)
+CMD ["supervisord", "-n", "-c", "/app/supervisord.conf"]
