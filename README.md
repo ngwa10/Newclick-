@@ -15,7 +15,7 @@ Automates Pocket Option trades using signals from a Telegram channel. Features m
 ## Architecture.
 
 ```
-core.py                  # Main orchestrator, trade manager, hotkey controller
+core.py                  # Main. orchestrator, trade manager, hotkey controller
 telegram_integration.py  # Telegram listener and signal parser
 selenium_integration.py  # Selenium setup, asset/timeframe selection
 bot.py                   # Entry point, runs core.py
