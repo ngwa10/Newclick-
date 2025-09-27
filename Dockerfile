@@ -26,8 +26,9 @@ FROM python:3.12-slim
 # Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV DISPLAY=:1
+ENV CHROME_ARGS="--no-sandbox --disable-dev-shm-usage --disable-gpu --headless --memory-pressure-off --max_old_space_size=2048 --disable-background-timer-throttling --disable-renderer-backgrounding"
 
-# Install runtime dependencies including Tesseract OCR, supervisord, x11vnc, git for noVNC cloning
+# Install runtime dependencies - optimized for smaller size and better performance
 RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     chromium \
@@ -39,29 +40,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     libx11-6 \
     libxtst6 \
-    libpng16-16 \
-    libgl1 \
     libgl1-mesa-dri \
     fonts-liberation \
     libatspi2.0-0 \
-    libcairo2 \
-    libcups2 \
     libdbus-1-3 \
     libglib2.0-0 \
     libgtk-3-0 \
     libnspr4 \
     libnss3 \
-    libpango-1.0-0 \
     libxdamage1 \
     libxkbcommon0 \
     xdg-utils \
- && apt-get clean && rm -rf /var/lib/apt/lists/*
+ && apt-get clean && rm -rf /var/lib/apt/lists/* \
+ && rm -rf /tmp/* /var/tmp/*
 
-# Clone noVNC into /opt/noVNC (keep git installed)
-RUN git clone https://github.com/novnc/noVNC.git /opt/noVNC
-
-# Create a non-root user
-RUN useradd -m -u 1000 appuser
+# Clone noVNC into /opt/noVNC and clean up git after
+RUN git clone --depth 1 https://github.com/novnc/noVNC.git /opt/noVNC \
+ && apt-get remove -y git && apt-get autoremove -y
 
 # Set working directory
 WORKDIR /app
@@ -70,14 +65,18 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application files including wait-for-xvfb.sh
+# Copy application files
 COPY run_bot.sh core.py supervisord.conf bot.py selenium_integration.py wait-for-xvfb.sh /app/
 
-# Fix permissions, make scripts executable, and set ownership
-RUN chmod +x /app/run_bot.sh /app/wait-for-xvfb.sh && chown -R appuser:appuser /app
+# Fix permissions and make scripts executable
+RUN chmod +x /app/run_bot.sh /app/wait-for-xvfb.sh
 
-# Switch to non-root user
-USER appuser
+# Expose the port for noVNC (this should match your Zeabur port setting)
+EXPOSE 6080
 
-# Start supervisord in foreground with correct arguments (no invalid -d)
+# Health check to ensure container is responding
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:6080/vnc.html || exit 1
+
+# Start supervisord in foreground
 CMD ["supervisord", "-n", "-c", "/app/supervisord.conf"]
