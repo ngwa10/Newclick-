@@ -1,6 +1,7 @@
 """
 Core logic for Pocket Option Telegram Trading Bot.
-Includes: main bot orchestrator, trade manager, Telegram listener, health server, and WebDriver setup.
+Includes: main bot orchestrator, trade manager, Telegram listener, health server, and
+connects to the browser session started by bot.py (if needed for Selenium).
 """
 
 import os
@@ -24,7 +25,7 @@ TELEGRAM_BOT_TOKEN = "8477806088:AAGEXpIAwN5tNQM0hsCGqP-otpLJjPJLmWA"
 TELEGRAM_CHANNEL = "-1003033183667"
 WEB_PORT = 8080
 NOVNC_PORT = 6080
-HEALTH_PORT = 6081  # Changed to avoid conflict with NOVNC
+HEALTH_PORT = 6081
 POST_LOGIN_WAIT = 180
 
 # =========================
@@ -53,7 +54,7 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
         elif self.path == '/vnc.html':
             self.send_response(302)
-            self.send_header('Location', '/vnc.html')  # Redirect fixed
+            self.send_header('Location', '/vnc.html')
             self.end_headers()
         else:
             self.send_response(404)
@@ -104,7 +105,7 @@ try:
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.common.by import By
-    logger.info("Selenium imports successful")
+    logger.info("Selenium imports successful (will attach to running session if needed)")
 except Exception as e:
     webdriver = None
     logger.warning(f"Selenium not available: {e}")
@@ -150,7 +151,7 @@ class TradeManager:
         if signal.get("timezone", "OTC-3") == "OTC-4":
             fmt = "%H:%M:%S" if len(entry_time.split(":")) == 3 else "%H:%M"
             dt = datetime.strptime(entry_time, fmt)
-            dt += timedelta(hours=1)  # Convert to OTC-3
+            dt += timedelta(hours=1)
             entry_time = dt.strftime(fmt)
             signal['entry_time'] = entry_time
 
@@ -219,4 +220,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-          
+                     
