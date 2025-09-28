@@ -1,10 +1,7 @@
 # ---------- Stage 1: Build dependencies ----------
 FROM python:3.12-slim AS builder
 
-# Set environment variables
 ENV PYTHONUNBUFFERED=1
-
-# Set working directory
 WORKDIR /app
 
 # Install build tools temporarily
@@ -13,25 +10,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first to leverage Docker cache
+# Copy requirements and install
 COPY requirements.txt /app/
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ---------- Stage 2: Final runtime image ----------
 FROM python:3.12-slim
 
-# Environment variables - CRITICAL FIX
 ENV PYTHONUNBUFFERED=1
 ENV DISPLAY=:1
-ENV PORT=8080
-ENV CHROME_ARGS="--no-sandbox --disable-dev-shm-usage --disable-gpu --headless --memory-pressure-off --max_old_space_size=256 --disable-background-timer-throttling --disable-renderer-backgrounding"
+ENV PORT=6080
+ENV CHROME_ARGS="--no-sandbox --disable-dev-shm-usage --disable-gpu --headless --memory-pressure-off --max_old_space_size=2048 --disable-background-timer-throttling --disable-renderer-backgrounding"
 
-# Install runtime dependencies with ChromeDriver fix
+WORKDIR /app
+
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     chromium \
+    chromium-driver \
     xvfb \
     x11-utils \
     x11vnc \
@@ -52,41 +49,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
     curl \
     netcat-openbsd \
-    wget \
-    unzip \
- && apt-get clean && rm -rf /var/lib/apt/lists/* \
- && rm -rf /tmp/* /var/tmp/*
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Download ChromeDriver manually - CRITICAL FIX
-RUN wget -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip \
- && unzip /tmp/chromedriver.zip -d /tmp/ \
- && mv /tmp/chromedriver /usr/local/bin/chromedriver \
- && chmod +x /usr/local/bin/chromedriver \
- && rm /tmp/chromedriver.zip
+# Install Python runtime dependency for WebSocket performance
+RUN pip install numpy
 
-# Clone noVNC
+# Clone noVNC and websockify
 RUN git clone --depth 1 https://github.com/novnc/noVNC.git /opt/noVNC \
  && git clone --depth 1 https://github.com/novnc/websockify.git /opt/noVNC/utils/websockify
-
-# Set working directory
-WORKDIR /app
 
 # Copy installed Python packages from builder stage
 COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application files
-COPY supervisord.conf core.py bot.py wait-for-xvfb.sh health-check.sh /app/
+COPY core.py bot.py run_bot.sh wait-for-xvfb.sh supervisord.conf health-check.sh selenium_integration.py /app/
 
-# Fix permissions and make scripts executable
-RUN chmod +x /app/wait-for-xvfb.sh /app/health-check.sh
+# Make scripts executable
+RUN chmod +x /app/run_bot.sh /app/wait-for-xvfb.sh /app/health-check.sh
 
-# Use PORT environment variable - CRITICAL FIX
-EXPOSE $PORT
+# Expose noVNC port
+EXPOSE 6080
 
-# Health check that waits for all services
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=15s --start-period=120s --retries=5 \
     CMD /app/health-check.sh
 
-# Start supervisord
+# Start Supervisor in foreground
 CMD ["supervisord", "-n", "-c", "/app/supervisord.conf"]
