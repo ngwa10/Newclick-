@@ -1,161 +1,138 @@
+#!/usr/bin/env python3
 """
-Setup Chrome WebDriver for Pocket Option automation.
-Fills credentials, clicks Login, detects login completion, and keeps Chrome running
-for integration with other modules (e.g., Telegram signal handlers).
-Manual CAPTCHA handled via VNC.
+Bot orchestrator for Pocket Option Telegram Trading.
+Manages health server, Telegram listener, trades, and GUI automation.
 """
 
 import os
 import sys
 import time
-import traceback
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import WebDriverException, NoSuchElementException
-from dotenv import load_dotenv
+import threading
+import logging
+import signal
+from datetime import datetime, timezone, timedelta
+from typing import Optional, Dict, Any
 
-# -----------------------
-# Force stdout flush
-# -----------------------
-sys.stdout.reconfigure(line_buffering=True)
-sys.stderr.reconfigure(line_buffering=True)
+# -------------------------
+# Logging
+# -------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("/tmp/bot.log")
+    ]
+)
+logger = logging.getLogger(__name__)
 
-print("[🟢] bot_setup.py starting...")
+# -------------------------
+# Environment
+# -------------------------
+os.environ.setdefault("DISPLAY", ":1")
 
-# -----------------------
-# Load environment variables
-# -----------------------
-env_path = '/app/.env'
-if os.path.exists(env_path):
-    load_dotenv(env_path)
-    print(f"[🟢] Loaded environment variables from {env_path}")
-else:
-    print(f"[⚠️] .env file not found, relying on system environment variables")
+try:
+    import pyautogui
+    pyautogui.FAILSAFE = True
+    pyautogui.PAUSE = 0.1
+    pyautogui.size()  # sanity check
+    logger.info("[✅] pyautogui loaded and display accessible")
+except Exception as e:
+    pyautogui = None
+    logger.warning(f"[⚠️] pyautogui not available: {e}")
 
-# -----------------------
-# Environment for Xvfb/VNC
-# -----------------------
-os.environ['DISPLAY'] = ':1'
-os.environ['XAUTHORITY'] = '/tmp/.Xauthority'
-if not os.path.exists('/tmp/.Xauthority'):
-    open('/tmp/.Xauthority', 'a').close()
-    print("[⚠️] Created empty .Xauthority file. Ensure Xvfb is running correctly.")
+try:
+    from telegram_integration import start_telegram_listener
+    logger.info("[✅] Telegram module loaded")
+except Exception as e:
+    start_telegram_listener = None
+    logger.warning(f"[⚠️] Telegram listener not available: {e}")
 
-# -----------------------
-# Credentials
-# -----------------------
-EMAIL = os.getenv("POCKET_EMAIL")
-PASSWORD = os.getenv("POCKET_PASS")
-if not EMAIL or not PASSWORD:
-    print("[❌] Pocket Option email or password is missing.", file=sys.stderr)
-    raise ValueError("Missing Pocket Option credentials in environment variables.")
+# -------------------------
+# Trade Manager
+# -------------------------
+class TradeManager:
+    def __init__(self, base_amount: float = 1.0, max_martingale: int = 2):
+        self.trading_active = False
+        self.base_amount = base_amount
+        self.max_martingale = max_martingale
 
-print(f"[🔑] Pocket Option email loaded: {EMAIL}")
+    def handle_command(self, command: str):
+        cmd = command.strip().lower()
+        if cmd.startswith("/start"):
+            self.trading_active = True
+        elif cmd.startswith("/stop"):
+            self.trading_active = False
 
+    def handle_signal(self, signal_data: Dict[str, Any]):
+        if not self.trading_active:
+            return
+        # For simplicity, we just log signals
+        logger.info(f"[📈] Signal received: {signal_data}")
 
-def start_driver():
-    """
-    Starts Chrome WebDriver, logs in to Pocket Option, and returns the driver object
-    for other modules (e.g., Telegram handlers) to use.
-    """
-    driver = None
-    try:
-        # -----------------------
-        # Chrome setup
-        # -----------------------
-        chrome_options = Options()
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--start-maximized")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        chrome_options.add_argument("--user-data-dir=/tmp/chrome-user-data")
-
-        service = Service("/usr/local/bin/chromedriver")
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-
-        driver.get("https://pocketoption.com/en/login/")
-        print("[✅] Chrome started and navigated to login page.")
-
-        # -----------------------
-        # Fill credentials
-        # -----------------------
+    def place_trade(self, amount: float, direction: str):
+        if pyautogui is None:
+            return
         try:
-            time.sleep(3)  # small buffer for page load
-            email_input = driver.find_element(By.NAME, "email")
-            password_input = driver.find_element(By.NAME, "password")
-
-            email_input.clear()
-            email_input.send_keys(EMAIL)
-            password_input.clear()
-            password_input.send_keys(PASSWORD)
-            print("[✅] Credentials filled. Complete CAPTCHA and login manually via VNC.")
-
-            # -----------------------
-            # Click login automatically
-            # -----------------------
-            login_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-            login_button.click()
-            print("[✅] Login button clicked. Waiting for dashboard...")
-
-            # -----------------------
-            # Detect login completion dynamically
-            # -----------------------
-            timeout = 180  # seconds
-            poll_interval = 5
-            elapsed = 0
-            while elapsed < timeout:
-                time.sleep(poll_interval)
-                elapsed += poll_interval
-                current_url = driver.current_url
-                if "dashboard" in current_url or "trade" in current_url:
-                    print(f"[🟢] Login successful. Redirected to: {current_url}")
-                    break
-                else:
-                    print(f"[⏳] Still on login page... ({elapsed}s elapsed)")
-            else:
-                print("[⚠️] Login may not have completed. Timeout reached.", file=sys.stderr)
-
-        except NoSuchElementException:
-            print("[❌] Could not find login form elements.", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
-            raise
+            key = "w" if direction.upper() == "BUY" else "s"
+            pyautogui.keyDown("shift")
+            pyautogui.press(key)
+            pyautogui.keyUp("shift")
+            logger.info(f"[💹] Placed trade {direction} with {amount}")
         except Exception as e:
-            print(f"[❌] Error during login process: {e}", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
-            raise
+            logger.warning(f"[⚠️] Trade failed: {e}")
 
-        print("[🟢] Chrome is ready. Returning driver for external control (Telegram signals, etc.).")
-        return driver
+# -------------------------
+# Health server
+# -------------------------
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
-    except WebDriverException as e:
-        print(f"[❌] WebDriver error: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        if driver:
-            driver.quit()
-        raise
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path in ["/", "/health", "/status"]:
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(
+                f'{{"status":"healthy","bot":"running","timestamp":{time.time()}}}'.encode()
+            )
+        else:
+            self.send_response(404)
+            self.end_headers()
 
-    except Exception as e:
-        print(f"[❌] Unhandled error occurred: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        if driver:
-            driver.quit()
-        raise
+    def log_message(self, format, *args):
+        pass  # suppress logs
 
+def start_health_server():
+    server = HTTPServer(("0.0.0.0", 6081), HealthHandler)
+    server.serve_forever()
 
-# -----------------------
-# Entry point
-# -----------------------
+# -------------------------
+# Signal Handlers
+# -------------------------
+def setup_signal_handlers():
+    def handler(signum, frame):
+        logger.info("[✋] Exiting...")
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, handler)
+    signal.signal(signal.SIGINT, handler)
+
+# -------------------------
+# Main
+# -------------------------
+def main():
+    setup_signal_handlers()
+    threading.Thread(target=start_health_server, daemon=True).start()
+    trade_manager = TradeManager()
+    if start_telegram_listener:
+        threading.Thread(
+            target=start_telegram_listener,
+            args=(trade_manager.handle_signal, trade_manager.handle_command),
+            daemon=True
+        ).start()
+    while True:
+        time.sleep(30)
+
 if __name__ == "__main__":
-    driver_instance = start_driver()
-    try:
-        print("[🟢] Press Ctrl+C to exit once manual login/CAPTCHA is done.")
-        while True:
-            time.sleep(60)  # keep script alive for VNC/manual actions
-    except KeyboardInterrupt:
-        print("[🔚] Exiting script. Closing Chrome.")
-        driver_instance.quit()
+    main()
+    
