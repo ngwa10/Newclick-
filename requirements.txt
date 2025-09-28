@@ -19,3 +19,7 @@ pillow
 
 # Environment variables
 python-dotenv
+
+# Additional dependencies for stability
+requests
+numpy
